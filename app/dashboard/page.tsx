@@ -87,7 +87,7 @@ async function loadData() {
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  const site = session.user.site ?? "all";
+  const site = (session.user.site ?? "all") as import("@/lib/staff").SiteFilter;
   const { allStaff, credentials, trainingHours, roles, lifecycle, driverInfo } = await loadData();
 
   return (

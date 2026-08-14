@@ -59,7 +59,7 @@ async function loadOrderHistory(): Promise<OrderHistoryEntry[]> {
 
 export default async function OrdersPage() {
   const session = await getServerSession(authOptions);
-  const sessionSite = session?.user.site ?? "all";
+  const sessionSite = (session?.user.site ?? "all") as import("@/lib/staff").SiteFilter;
 
   const [stores, history, pendingOrders] = await Promise.all([
     loadStores(),
