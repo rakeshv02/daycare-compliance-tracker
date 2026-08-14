@@ -16,12 +16,14 @@ const SITES: { value: SiteFilter | "all"; label: string }[] = [
   { value: "Light House Academy", label: "Light House Academy" },
 ];
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 function CopyLinkButton({ site }: { site: Site }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       onClick={() => {
-        const url = `${window.location.origin}/inquiry/${slugFromSite(site)}`;
+        const url = `${window.location.origin}${BASE}/inquiry/${slugFromSite(site)}`;
         navigator.clipboard.writeText(url);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -93,13 +95,13 @@ export default function WaitlistTracker({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <a
-              href="/dashboard/waitlist/activity"
+              href={`${BASE}/dashboard/waitlist/activity`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <ClipboardList size={14} /> Activity log
             </a>
             <a
-              href="/dashboard"
+              href={`${BASE}/dashboard`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <ShieldCheck size={14} /> Compliance tracker (staff login)

@@ -116,8 +116,10 @@ export default function ComplianceTracker({
     startTransition(() => setStaffRole(staffId, role));
   }
 
+  const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
   function openPrint(staffId: string) {
-    window.open(`/dashboard/print/${staffId}`, "_blank");
+    window.open(`${BASE}/dashboard/print/${staffId}`, "_blank");
   }
 
   return (
@@ -140,25 +142,25 @@ export default function ComplianceTracker({
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="/dashboard/waitlist"
+              href={`${BASE}/dashboard/waitlist`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <UserPlus size={14} /> Waitlist
             </a>
             <a
-              href="/dashboard/orders"
+              href={`${BASE}/dashboard/orders`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <ShoppingCart size={14} /> Orders
             </a>
             <a
-              href="/dashboard/report"
+              href={`${BASE}/dashboard/report`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <BarChart2 size={14} /> Report
             </a>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => signOut({ callbackUrl: `${BASE}/login` })}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
             >
               <LogOut size={14} /> Sign out
