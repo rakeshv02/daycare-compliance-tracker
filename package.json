@@ -1,0 +1,32 @@
+{
+  "name": "@workspace/compliance-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port ${PORT:-3001} --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --port ${PORT:-3001} --hostname 0.0.0.0",
+    "db:init": "node scripts/init-db.mjs"
+  },
+  "dependencies": {
+    "next": "14.2.29",
+    "react": "^18",
+    "react-dom": "^18",
+    "next-auth": "^4.24.11",
+    "pg": "^8.13.3",
+    "bcryptjs": "^2.4.3",
+    "lucide-react": "^0.511.0",
+    "resend": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/pg": "^8.11.13",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8",
+    "autoprefixer": "^10.0.1"
+  }
+}

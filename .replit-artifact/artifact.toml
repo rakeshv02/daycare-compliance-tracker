@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/compliance-tracker/"
+title = "Staff Compliance Tracker"
+description = "Internal daycare management tool covering staff compliance tracking, parent waitlist and enrollment pipeline, and grocery order management for Noah's Arks and Light House Academy."
+version = "1.0.0"
+id = "artifacts/compliance-tracker"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/compliance-tracker/" ]
+localPort = 21186
+
+[services.development]
+run = "pnpm --filter @workspace/compliance-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/compliance-tracker", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/compliance-tracker/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21186"
+BASE_PATH = "/compliance-tracker/"
