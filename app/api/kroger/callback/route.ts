@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    await exchangeCodeForToken(code, redirectUri, session.user.name ?? session.user.site ?? "Unknown");
+    await exchangeCodeForToken(code, redirectUri, session.user?.name ?? session.user?.site ?? "Unknown");
     setupUrl.searchParams.set("kroger_connected", "1");
   } catch (err) {
     setupUrl.searchParams.set("kroger_error", err instanceof Error ? err.message : "Connection failed.");
