@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
+const basePath = (process.env.BASE_PATH || "").replace(/\/$/, "");
+
 const nextConfig = {
-  // Strip trailing slash from BASE_PATH — Next.js basePath must not end with /
-  basePath: (process.env.BASE_PATH || "").replace(/\/$/, ""),
+  basePath,
+  // Expose basePath to client-side so SessionProvider can find the auth routes
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
 };
 module.exports = nextConfig;
