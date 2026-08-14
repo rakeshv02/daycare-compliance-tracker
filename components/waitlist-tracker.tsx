@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Heart, Search, Building2, Link2, Check, ShieldCheck,
   MessageCircleHeart, ClipboardList, Users, Flag, Hourglass,
@@ -46,6 +46,19 @@ export default function WaitlistTracker({
   const [siteFilter, setSiteFilter] = useState<SiteFilter | "all">(sessionSite === "all" ? "all" : sessionSite);
   const [q, setQ] = useState("");
   const [detail, setDetail] = useState<Inquiry | null>(null);
+  const [detailVersion, setDetailVersion] = useState(0);
+
+  // When router.refresh() brings in updated inquiries, sync the open modal
+  // so it shows fresh data without the user having to close and reopen it.
+  useEffect(() => {
+    if (detail) {
+      const updated = inquiries.find(i => i.id === detail.id);
+      if (updated && updated !== detail) {
+        setDetail(updated);
+        setDetailVersion(v => v + 1);
+      }
+    }
+  }, [inquiries]);
 
   const availableSites = sessionSite === "all"
     ? SITES
@@ -268,6 +281,7 @@ export default function WaitlistTracker({
 
       {detail && (
         <InquiryDetailModal
+          key={`${detail.id}-${detailVersion}`}
           inquiry={detail}
           onClose={() => setDetail(null)}
         />

@@ -2,6 +2,9 @@ import pool from "@/lib/db";
 import { mapInquiryRow, type InquiryRow, type AuditLogEntry } from "@/lib/inquiries";
 import WaitlistTracker from "@/components/waitlist-tracker";
 
+// Always fetch fresh data — never serve a cached page after an update.
+export const dynamic = "force-dynamic";
+
 // No login required for this dashboard — intentionally open (see middleware.ts).
 // Sensitive actions (delete, send thank-you text) require a staff action-code
 // instead, and are recorded in inquiry_audit_log — see lib/actions.ts.
