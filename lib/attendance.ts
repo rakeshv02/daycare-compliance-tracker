@@ -47,7 +47,14 @@ export function normalizeAttendanceName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-const IGNORED_ATTENDANCE_NAMES = new Set(["rakeshverma", "rakeshvarma", "madhuverma", "madhuvarma"]);
+const IGNORED_ATTENDANCE_NAMES = new Set([
+  "rakeshverma",
+  "rakeshvarma",
+  "madhuverma",
+  "madhuvarma",
+  "makaylasmith",
+  "superadmin",
+]);
 
 export function isIgnoredAttendanceName(value: string) {
   return IGNORED_ATTENDANCE_NAMES.has(normalizeAttendanceName(value));

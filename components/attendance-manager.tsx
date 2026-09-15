@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
+import { isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendanceDay, AttendancePunch, AttendanceSchedule } from "@/lib/attendance";
 import {
   classifyAttendanceDay, importAttendanceCsv, matchAttendanceName, saveWeekdayAttendanceSchedule,
@@ -33,6 +34,7 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
   const filteredDays = useMemo(() => days.filter((day) =>
     (!month || day.date.startsWith(month)) && (!exceptionOnly || day.exceptions.length || day.classification)
   ), [days, month, exceptionOnly]);
+  const visibleUnmatched = unmatched.filter((item) => !isIgnoredAttendanceName(item.imported_name));
 
   function run(task: () => Promise<void>, success: string) {
     setMessage("");
@@ -128,10 +130,10 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
             </div>
             <div className="grid lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)] gap-4">
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
-              <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Unmatched attendance records</h2><p className="mt-1 text-sm text-[#7A7A74]">Choose the site-specific Employee ID for each imported name.</p></div><span className="rounded-full bg-[#FCF3E3] px-2.5 py-1 text-xs font-semibold text-[#8C6217]">{unmatched.length} unmatched</span></div>
-              <div className="space-y-3">{unmatched.map((item) => (
+              <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Unmatched attendance records</h2><p className="mt-1 text-sm text-[#7A7A74]">Choose the site-specific Employee ID for each imported name.</p></div><span className="rounded-full bg-[#FCF3E3] px-2.5 py-1 text-xs font-semibold text-[#8C6217]">{visibleUnmatched.length} unmatched</span></div>
+              <div className="space-y-3">{visibleUnmatched.map((item) => (
                 <MatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={roster} run={run} />
-              ))}{!unmatched.length && <p className="text-sm text-[#4A7C68]">All imported names are matched.</p>}</div>
+              ))}{!visibleUnmatched.length && <p className="text-sm text-[#4A7C68]">All imported names are matched.</p>}</div>
             </section>
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
               <h2 className="font-semibold text-[#1F4D47] mb-1">Missing from latest upload</h2>
