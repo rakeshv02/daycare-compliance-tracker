@@ -1,5 +1,6 @@
 export type StaffMember = {
   id: string;
+  employeeId?: string;
   name: string;
   site: "Noah's Arks" | "Light House Academy";
   hireDate: string;

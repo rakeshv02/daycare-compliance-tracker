@@ -124,6 +124,12 @@ CREATE TABLE IF NOT EXISTS staff_leave_access (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS staff_employee_ids (
+  staff_id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL UNIQUE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS staff_leave_requests (
   id BIGSERIAL PRIMARY KEY,
   staff_id TEXT NOT NULL,

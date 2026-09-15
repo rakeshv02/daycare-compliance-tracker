@@ -11,7 +11,7 @@ export default async function LeaveAdminPage() {
   if (!session) redirect("/login");
   if (session.user.site !== "all") redirect("/dashboard");
   const roster = await loadMergedRoster();
-  const [requests, access] = await Promise.all([
+  const [requests, access, employeeIds] = await Promise.all([
     pool.query<{
       id: number; staff_id: string; leave_type: string; date_from: string; date_to: string;
       reason: string; status: string; director_note: string; created_at: string; decided_at: string | null;
@@ -19,6 +19,7 @@ export default async function LeaveAdminPage() {
         created_at::text,decided_at::text FROM staff_leave_requests ORDER BY
         CASE status WHEN 'Pending' THEN 0 ELSE 1 END, created_at DESC`),
     pool.query<{ staff_id: string; is_enabled: boolean }>("SELECT staff_id,is_enabled FROM staff_leave_access"),
+    pool.query<{ staff_id: string; employee_id: string }>("SELECT staff_id,employee_id FROM staff_employee_ids"),
   ]);
   const rosterMap = new Map(roster.map((person) => [person.id, person]));
   const mapped: LeaveRequest[] = requests.rows.flatMap((row) => {
@@ -31,5 +32,10 @@ export default async function LeaveAdminPage() {
       createdAt: row.created_at, decidedAt: row.decided_at,
     }];
   });
-  return <LeaveAdminManager roster={roster} requests={mapped} enabledStaffIds={access.rows.filter((row) => row.is_enabled).map((row) => row.staff_id)} />;
+  return <LeaveAdminManager
+    roster={roster}
+    requests={mapped}
+    enabledStaffIds={access.rows.filter((row) => row.is_enabled).map((row) => row.staff_id)}
+    employeeIds={Object.fromEntries(employeeIds.rows.map((row) => [row.staff_id, row.employee_id]))}
+  />;
 }

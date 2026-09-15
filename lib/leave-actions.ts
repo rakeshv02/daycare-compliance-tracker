@@ -22,17 +22,20 @@ async function validStaff(staffId: string) {
 }
 
 export async function staffLeaveLogin(formData: FormData) {
-  const staffId = String(formData.get("staffId") ?? "").trim().toUpperCase();
+  const employeeId = String(formData.get("staffId") ?? "").trim().toUpperCase();
   const pin = String(formData.get("pin") ?? "");
-  const result = await pool.query<{ pin_hash: string; is_enabled: boolean }>(
-    "SELECT pin_hash,is_enabled FROM staff_leave_access WHERE staff_id=$1",
-    [staffId],
+  const result = await pool.query<{ staff_id: string; pin_hash: string; is_enabled: boolean }>(
+    `SELECT ids.staff_id,access.pin_hash,access.is_enabled
+     FROM staff_employee_ids ids
+     JOIN staff_leave_access access ON access.staff_id=ids.staff_id
+     WHERE ids.employee_id=$1`,
+    [employeeId],
   );
   const access = result.rows[0];
   if (!access?.is_enabled || !await bcrypt.compare(pin, access.pin_hash)) {
     return { error: "Employee ID or PIN is incorrect." };
   }
-  setLeaveSession(staffId);
+  setLeaveSession(access.staff_id);
   redirect("/leave");
 }
 
@@ -53,6 +56,45 @@ export async function setStaffLeavePin(staffId: string, pin: string) {
     [staffId, hash],
   );
   revalidatePath("/dashboard/leave");
+}
+
+export async function saveStaffPortalAccess(staffId: string, employeeId: string, pin: string) {
+  await requireDirector();
+  if (!await validStaff(staffId)) throw new Error("Employee was not found.");
+  const normalizedEmployeeId = employeeId.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{3,20}$/.test(normalizedEmployeeId)) {
+    throw new Error("Employee ID must be 3–20 letters, numbers, or hyphens.");
+  }
+  if (pin && !/^\d{4,8}$/.test(pin)) throw new Error("PIN must contain 4–8 digits.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO staff_employee_ids(staff_id,employee_id) VALUES($1,$2)
+       ON CONFLICT(staff_id) DO UPDATE SET employee_id=$2,updated_at=NOW()`,
+      [staffId, normalizedEmployeeId],
+    );
+    if (pin) {
+      const hash = await bcrypt.hash(pin, 12);
+      await client.query(
+        `INSERT INTO staff_leave_access(staff_id,pin_hash,is_enabled)
+         VALUES($1,$2,true)
+         ON CONFLICT(staff_id) DO UPDATE SET pin_hash=$2,is_enabled=true,updated_at=NOW()`,
+        [staffId, hash],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      throw new Error("That Employee ID is already assigned to another employee.");
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+  revalidatePath("/dashboard/leave");
+  revalidatePath("/dashboard/attendance");
 }
 
 export async function submitLeaveRequest(formData: FormData) {

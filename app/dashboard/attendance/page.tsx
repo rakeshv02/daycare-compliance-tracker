@@ -9,11 +9,12 @@ import type { AttendancePunch, AttendanceSchedule, DayClassification } from "@/l
 import AttendanceManager from "@/components/attendance-manager";
 
 async function loadAttendance() {
-  const [dbStaff, lifecycle, imports, punches, schedules, classifications, unmatched] = await Promise.all([
+  const [dbStaff, lifecycle, employeeIds, imports, punches, schedules, classifications, unmatched] = await Promise.all([
     pool.query<{ id: string; name: string; site: string; hire_date: string | null; is_db_only: boolean }>(
       "SELECT id,name,site,hire_date::text,is_db_only FROM staff_members",
     ),
     pool.query<{ staff_id: string; is_active: boolean }>("SELECT staff_id,is_active FROM staff_lifecycle"),
+    pool.query<{ staff_id: string; employee_id: string }>("SELECT staff_id,employee_id FROM staff_employee_ids"),
     pool.query<{ id: number; file_name: string; period_start: string; period_end: string; row_count: number; uploaded_at: string }>(
       `SELECT id,file_name,period_start::text,period_end::text,row_count,uploaded_at::text
        FROM attendance_imports ORDER BY uploaded_at DESC LIMIT 12`,
@@ -36,13 +37,14 @@ async function loadAttendance() {
     ),
   ]);
 
+  const employeeIdMap = new Map(employeeIds.rows.map((row) => [row.staff_id, row.employee_id]));
   const overrides = new Map(dbStaff.rows.map((row) => [row.id, row]));
   const roster: StaffMember[] = STAFF_BASE.map((person) => {
     const row = overrides.get(person.id);
-    return row ? { ...person, name: row.name, site: row.site as StaffMember["site"], hireDate: row.hire_date ?? person.hireDate } : person;
+    return row ? { ...person, employeeId: employeeIdMap.get(person.id), name: row.name, site: row.site as StaffMember["site"], hireDate: row.hire_date ?? person.hireDate } : { ...person, employeeId: employeeIdMap.get(person.id) };
   });
   roster.push(...dbStaff.rows.filter((row) => row.is_db_only).map((row) => ({
-    id: row.id, name: row.name, site: row.site as StaffMember["site"], hireDate: row.hire_date ?? "",
+    id: row.id, employeeId: employeeIdMap.get(row.id), name: row.name, site: row.site as StaffMember["site"], hireDate: row.hire_date ?? "",
   })));
   const inactive = new Set(lifecycle.rows.filter((row) => !row.is_active).map((row) => row.staff_id));
   const activeRoster = roster.filter((person) => !inactive.has(person.id));

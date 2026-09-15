@@ -164,7 +164,7 @@ function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom,
       <p className="mt-1 text-sm text-[#74746E]">Set one recurring weekday schedule for this employee. Saturday and Sunday are not scheduled.</p>
     </div>
     <div className="grid sm:grid-cols-2 gap-3">
-      <label className="text-sm">Employee<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">{roster.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.site}</option>)}</select></label>
+      <label className="text-sm">Employee<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">{roster.map((p) => <option key={p.id} value={p.id}>{p.name}{p.employeeId ? ` (${p.employeeId})` : ""} — {p.site}</option>)}</select></label>
       <label className="text-sm">Effective from<input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
     </div>
     <WeekdayScheduleForm
