@@ -37,6 +37,7 @@ export type AttendanceDay = {
   lastOut: string | null;
   scheduledStart: string | null;
   scheduledEnd: string | null;
+  breakMinutes: number;
   exceptions: string[];
   classification: string;
   note: string;
@@ -50,6 +51,30 @@ function minutes(value: string | null) {
   if (!value) return null;
   const [hour, minute] = value.slice(0, 5).split(":").map(Number);
   return hour * 60 + minute;
+}
+
+export function totalBreakMinutes(punches: Pick<AttendancePunch, "time" | "status">[]) {
+  const ordered = [...punches].sort((a, b) => a.time.localeCompare(b.time));
+  let hasClockedIn = false;
+  let onDuty = false;
+  let breakStarted: number | null = null;
+  let total = 0;
+  for (const punch of ordered) {
+    const punchMinutes = minutes(punch.time);
+    if (punchMinutes === null) continue;
+    if (punch.status === "In") {
+      if (hasClockedIn && !onDuty && breakStarted !== null && punchMinutes >= breakStarted) {
+        total += punchMinutes - breakStarted;
+      }
+      hasClockedIn = true;
+      onDuty = true;
+      breakStarted = null;
+    } else if (hasClockedIn && onDuty) {
+      onDuty = false;
+      breakStarted = punchMinutes;
+    }
+  }
+  return total;
 }
 
 export function buildAttendanceDays(
@@ -80,6 +105,7 @@ export function buildAttendanceDays(
     const outs = dayPunches.filter((p) => p.status === "Out").map((p) => p.time).sort();
     const firstIn = ins[0] ?? null;
     const lastOut = outs.at(-1) ?? null;
+    const breakMinutes = totalBreakMinutes(dayPunches);
     const exceptions: string[] = [];
     if (!firstIn || !lastOut) exceptions.push("Missing punch");
     if (schedule?.isWorkday) {
@@ -101,6 +127,7 @@ export function buildAttendanceDays(
       lastOut,
       scheduledStart: schedule?.isWorkday ? schedule.start : null,
       scheduledEnd: schedule?.isWorkday ? schedule.end : null,
+      breakMinutes,
       exceptions,
       classification: classification?.classification ?? "",
       note: classification?.note ?? "",

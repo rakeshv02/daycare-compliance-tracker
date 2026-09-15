@@ -91,7 +91,7 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
             <div className="overflow-x-auto rounded-xl border border-[#E9E7DF] bg-white">
               <table className="w-full text-sm">
                 <thead className="bg-[#F3F2ED] text-left text-xs uppercase tracking-wide text-[#6B6B64]">
-                  <tr>{["Date / employee","Scheduled","Actual","Exceptions","Classification / note"].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr>
+                  <tr>{["Date / employee","Scheduled","Actual","Break","Exceptions","Classification / note"].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-[#EEECE5]">
                   {filteredDays.map((day) => (
@@ -99,6 +99,7 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
                       <td className="px-4 py-3"><b>{day.date}</b><br />{day.staffName}<br /><span className="text-xs text-[#8A8A84]">{day.site}</span></td>
                       <td className="px-4 py-3 whitespace-nowrap">{day.scheduledStart?.slice(0,5) ?? "—"} – {day.scheduledEnd?.slice(0,5) ?? "—"}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{day.firstIn?.slice(0,5) ?? "—"} – {day.lastOut?.slice(0,5) ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatBreak(day.breakMinutes)}</td>
                       <td className="px-4 py-3">{day.exceptions.length ? day.exceptions.map((x) => <span key={x} className="inline-block mr-1 mb-1 rounded-full bg-[#FBEAE6] text-[#A53D29] px-2 py-1 text-xs font-semibold">{x}</span>) : "None"}</td>
                       <td className="px-4 py-3 min-w-[240px]">
                         <select defaultValue={day.classification} onChange={(e) => run(() => classifyAttendanceDay(day.staffId, day.date, e.target.value, day.note), "Classification saved.")} className="w-full rounded-lg border border-[#DDDAD0] px-2 py-1.5">
@@ -108,7 +109,7 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
                       </td>
                     </tr>
                   ))}
-                  {!filteredDays.length && <tr><td colSpan={5} className="p-8 text-center text-[#7A7A74]">No attendance days match these filters.</td></tr>}
+                  {!filteredDays.length && <tr><td colSpan={6} className="p-8 text-center text-[#7A7A74]">No attendance days match these filters.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -138,6 +139,13 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
       </div>
     </div>
   );
+}
+
+function formatBreak(totalMinutes: number) {
+  if (!totalMinutes) return "0 min";
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours} hr${hours === 1 ? "" : "s"}${minutes ? ` ${minutes} min` : ""}` : `${minutes} min`;
 }
 
 function Summary({ icon, label, value, warn }: { icon: React.ReactNode; label: string; value: React.ReactNode; warn?: boolean }) {
