@@ -13,9 +13,9 @@ export default async function LeaveAdminPage() {
   const roster = await loadMergedRoster();
   const [requests, access, employeeIds] = await Promise.all([
     pool.query<{
-      id: number; staff_id: string; leave_type: string; date_from: string; date_to: string;
+      id: number; staff_id: string; leave_type: string; is_paid_vacation: boolean; date_from: string; date_to: string;
       reason: string; status: string; director_note: string; created_at: string; decided_at: string | null;
-    }>(`SELECT id,staff_id,leave_type,date_from::text,date_to::text,reason,status,director_note,
+    }>(`SELECT id,staff_id,leave_type,is_paid_vacation,date_from::text,date_to::text,reason,status,director_note,
         created_at::text,decided_at::text FROM staff_leave_requests ORDER BY
         CASE status WHEN 'Pending' THEN 0 ELSE 1 END, created_at DESC`),
     pool.query<{ staff_id: string; is_enabled: boolean }>("SELECT staff_id,is_enabled FROM staff_leave_access"),
@@ -27,7 +27,7 @@ export default async function LeaveAdminPage() {
     if (!person) return [];
     return [{
       id: row.id, staffId: row.staff_id, staffName: person.name, site: person.site,
-      leaveType: row.leave_type, dateFrom: row.date_from, dateTo: row.date_to,
+      leaveType: row.leave_type, isPaidVacation: row.is_paid_vacation || row.leave_type === "Paid vacation", dateFrom: row.date_from, dateTo: row.date_to,
       reason: row.reason, status: row.status, directorNote: row.director_note,
       createdAt: row.created_at, decidedAt: row.decided_at,
     }];

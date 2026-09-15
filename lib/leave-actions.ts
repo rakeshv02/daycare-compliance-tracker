@@ -173,3 +173,17 @@ export async function decideLeaveRequest(requestId: number, status: "Approved" |
   revalidatePath("/leave");
   revalidatePath("/dashboard/leave");
 }
+
+export async function setPaidVacation(requestId: number, isPaid: boolean) {
+  await requireDirector();
+  const result = await pool.query(
+    `UPDATE staff_leave_requests
+     SET is_paid_vacation=$2,updated_at=NOW()
+     WHERE id=$1 AND status='Approved' AND leave_type IN ('Vacation','Paid vacation')`,
+    [requestId, isPaid],
+  );
+  if (!result.rowCount) return { error: "Only an approved vacation request can be marked as paid." };
+  revalidatePath("/leave");
+  revalidatePath("/dashboard/leave");
+  return { ok: true };
+}

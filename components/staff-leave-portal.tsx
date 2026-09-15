@@ -8,7 +8,7 @@ import { LEAVE_TYPES, weekdaysInclusive } from "@/lib/leave";
 import { cancelLeaveRequest, staffLeaveLogout, submitLeaveRequest } from "@/lib/leave-actions";
 
 type Summary = {
-  year: number; approvedDaysTaken: number; vacationTaken: number; pendingDays: number;
+  year: number; approvedDaysTaken: number; paidVacationTaken: number; pendingDays: number;
   lateDates: { date: string; scheduled: string | null; actual: string | null }[]; missingDates: string[];
 };
 
@@ -32,7 +32,7 @@ export default function StaffLeavePortal({ staff, requests, summaries }: { staff
         </div>
         {summary && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat icon={<CalendarDays />} label="Approved days taken" value={summary.approvedDaysTaken} />
-          <Stat icon={<Palmtree />} label="Vacation taken" value={summary.vacationTaken} />
+          <Stat icon={<Palmtree />} label="Paid vacation taken" value={summary.paidVacationTaken} />
           <Stat icon={<Clock3 />} label="Late arrivals" value={summary.lateDates.length} />
           <Stat icon={<CalendarDays />} label="Missing scheduled days" value={summary.missingDates.length} alert={summary.missingDates.length > 0} />
         </div>}
@@ -58,7 +58,7 @@ function DetailCard({ title, empty, children }: { title: string; empty: string; 
 }
 function RequestCard({ request, busy, cancel }: { request: LeaveRequest; busy: boolean; cancel: () => void }) {
   const colors: Record<string,string> = { Pending: "bg-[#FCF3E3] text-[#8C6217]", Approved: "bg-[#EAF5F0] text-[#2F725D]", Denied: "bg-[#FBEAE6] text-[#A33D28]", Cancelled: "bg-[#EFEFEB] text-[#74746E]" };
-  return <div className="rounded-2xl border border-[#E4E1D8] bg-white p-4"><div className="flex items-start justify-between gap-3"><div><b>{request.leaveType}</b><p className="text-sm text-[#55554F]">{request.dateFrom} through {request.dateTo} · {weekdaysInclusive(request.dateFrom, request.dateTo)} weekdays</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${colors[request.status]}`}>{request.status}</span></div>{request.reason && <p className="mt-3 text-sm">{request.reason}</p>}{request.directorNote && <p className="mt-3 rounded-lg bg-[#F4F3EE] p-2 text-sm"><b>Director note:</b> {request.directorNote}</p>}{request.status === "Pending" && <button disabled={busy} onClick={cancel} className="mt-3 text-xs font-semibold text-[#A33D28]">Cancel request</button>}</div>;
+  return <div className="rounded-2xl border border-[#E4E1D8] bg-white p-4"><div className="flex items-start justify-between gap-3"><div><b>{request.isPaidVacation ? "Paid vacation" : request.leaveType}</b><p className="text-sm text-[#55554F]">{request.dateFrom} through {request.dateTo} · {weekdaysInclusive(request.dateFrom, request.dateTo)} weekdays</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${colors[request.status]}`}>{request.status}</span></div>{request.reason && <p className="mt-3 text-sm">{request.reason}</p>}{request.directorNote && <p className="mt-3 rounded-lg bg-[#F4F3EE] p-2 text-sm"><b>Director note:</b> {request.directorNote}</p>}{request.status === "Pending" && <button disabled={busy} onClick={cancel} className="mt-3 text-xs font-semibold text-[#A33D28]">Cancel request</button>}</div>;
 }
 function RequestModal({ close }: { close: () => void }) {
   return <div className="fixed inset-0 z-50 flex items-end bg-black/35 sm:items-center sm:justify-center sm:p-4"><form action={submitLeaveRequest} className="w-full rounded-t-3xl bg-white p-5 sm:max-w-lg sm:rounded-2xl"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-semibold text-[#1F4D47]">Request leave</h2><button type="button" onClick={close}><X /></button></div><div className="space-y-4"><label className="block text-sm">Leave type<select name="leaveType" required className="mt-1 w-full rounded-xl border px-3 py-3">{LEAVE_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><label className="text-sm">From<input name="dateFrom" type="date" required className="mt-1 w-full rounded-xl border px-3 py-3" /></label><label className="text-sm">To<input name="dateTo" type="date" required className="mt-1 w-full rounded-xl border px-3 py-3" /></label></div><label className="block text-sm">Reason or note<textarea name="reason" rows={3} className="mt-1 w-full rounded-xl border px-3 py-3" /></label><button className="w-full rounded-xl bg-[#1F4D47] py-3 font-semibold text-white">Submit request</button></div></form></div>;

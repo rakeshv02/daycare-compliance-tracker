@@ -17,9 +17,9 @@ export default async function StaffLeavePage() {
 
   const [requestRows, punchRows, scheduleRows, classificationRows] = await Promise.all([
     pool.query<{
-      id: number; leave_type: string; date_from: string; date_to: string; reason: string;
+      id: number; leave_type: string; is_paid_vacation: boolean; date_from: string; date_to: string; reason: string;
       status: string; director_note: string; created_at: string; decided_at: string | null;
-    }>(`SELECT id,leave_type,date_from::text,date_to::text,reason,status,director_note,
+    }>(`SELECT id,leave_type,is_paid_vacation,date_from::text,date_to::text,reason,status,director_note,
         created_at::text,decided_at::text FROM staff_leave_requests WHERE staff_id=$1 ORDER BY created_at DESC`, [staffId]),
     pool.query<{
       id: number; import_id: number; work_date: string; punch_time: string; punch_status: "In" | "Out";
@@ -38,6 +38,7 @@ export default async function StaffLeavePage() {
   ]);
   const requests: LeaveRequest[] = requestRows.rows.map((row) => ({
     id: row.id, staffId, staffName: staff.name, site: staff.site, leaveType: row.leave_type,
+    isPaidVacation: row.is_paid_vacation || row.leave_type === "Paid vacation",
     dateFrom: row.date_from, dateTo: row.date_to, reason: row.reason, status: row.status,
     directorNote: row.director_note, createdAt: row.created_at, decidedAt: row.decided_at,
   }));
@@ -59,7 +60,7 @@ export default async function StaffLeavePage() {
     return {
       year,
       approvedDaysTaken: requests.reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
-      vacationTaken: requests.filter((r) => r.leaveType === "Vacation" || r.leaveType === "Paid vacation").reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
+      paidVacationTaken: requests.filter((r) => r.isPaidVacation).reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
       pendingDays: requests.filter((r) => r.status === "Pending").reduce((sum, request) => sum + (request.dateFrom.slice(0,4) <= String(year) && request.dateTo.slice(0,4) >= String(year) ? leaveDaysInYear({ ...request, status: "Approved" }, year, false) : 0), 0),
       ...attendance,
     };

@@ -21,6 +21,7 @@ try {
       id BIGSERIAL PRIMARY KEY,
       staff_id TEXT NOT NULL,
       leave_type TEXT NOT NULL,
+      is_paid_vacation BOOLEAN NOT NULL DEFAULT FALSE,
       date_from DATE NOT NULL,
       date_to DATE NOT NULL,
       reason TEXT NOT NULL DEFAULT '',
@@ -33,6 +34,8 @@ try {
     );
     CREATE INDEX IF NOT EXISTS staff_leave_requests_staff_idx ON staff_leave_requests(staff_id,date_from);
     CREATE INDEX IF NOT EXISTS staff_leave_requests_status_idx ON staff_leave_requests(status,created_at);
+    ALTER TABLE staff_leave_requests
+      ADD COLUMN IF NOT EXISTS is_paid_vacation BOOLEAN NOT NULL DEFAULT FALSE;
   `);
   console.log("Leave tables created (or already exist).");
 } finally {

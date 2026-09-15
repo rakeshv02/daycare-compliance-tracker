@@ -9,6 +9,7 @@ export type LeaveRequest = {
   staffName: string;
   site: string;
   leaveType: string;
+  isPaidVacation: boolean;
   dateFrom: string;
   dateTo: string;
   reason: string;
