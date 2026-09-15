@@ -121,10 +121,14 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
         )}
 
         {tab === "reconcile" && (
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[#C9DCD7] bg-[#EEF6F3] p-4">
+              <h2 className="font-semibold text-[#1F4D47]">Match attendance by location and Employee ID</h2>
+              <p className="mt-1 text-sm text-[#55706A]">Employees who work at both locations keep a separate employment record and Employee ID for each site. A CSV name can only be matched to an employee record from the same site.</p>
+            </div>
+            <div className="grid lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)] gap-4">
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
-              <h2 className="font-semibold text-[#1F4D47] mb-1">New or unmatched names</h2>
-              <p className="text-sm text-[#7A7A74] mb-4">Link each imported name to the correct training roster employee.</p>
+              <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Unmatched attendance records</h2><p className="mt-1 text-sm text-[#7A7A74]">Choose the site-specific Employee ID for each imported name.</p></div><span className="rounded-full bg-[#FCF3E3] px-2.5 py-1 text-xs font-semibold text-[#8C6217]">{unmatched.length} unmatched</span></div>
               <div className="space-y-3">{unmatched.map((item) => (
                 <MatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={roster} run={run} />
               ))}{!unmatched.length && <p className="text-sm text-[#4A7C68]">All imported names are matched.</p>}</div>
@@ -132,8 +136,9 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
               <h2 className="font-semibold text-[#1F4D47] mb-1">Missing from latest upload</h2>
               <p className="text-sm text-[#7A7A74] mb-4">Active roster employees at an included site with no punches in the latest file.</p>
-              <div className="space-y-2">{missing.map((person) => <div key={person.id} className="rounded-lg bg-[#FCF3E3] px-3 py-2 text-sm"><b>{person.name}</b><br /><span className="text-xs">{person.site}</span></div>)}{!missing.length && <p className="text-sm text-[#4A7C68]">No active employees are missing.</p>}</div>
+              <div className="space-y-2">{missing.map((person) => <div key={person.id} className="rounded-lg bg-[#FCF3E3] px-3 py-2 text-sm"><b>{person.name}</b><br /><span className="text-xs">{person.employeeId ?? "Employee ID not set"} · {person.site}</span></div>)}{!missing.length && <p className="text-sm text-[#4A7C68]">No active employees are missing.</p>}</div>
             </section>
+            </div>
           </div>
         )}
       </div>
@@ -155,7 +160,8 @@ function Summary({ icon, label, value, warn }: { icon: React.ReactNode; label: s
 function MatchRow({ item, roster, run }: { item: { imported_name: string; site: string }; roster: StaffMember[]; run: (task: () => Promise<void>, success: string) => void }) {
   const [staffId, setStaffId] = useState("");
   const options = roster.filter((person) => person.site === item.site);
-  return <div className="rounded-lg border border-[#E9E7DF] p-3"><b className="text-sm">{item.imported_name}</b><div className="text-xs text-[#7A7A74] mb-2">{item.site}</div><div className="flex gap-2"><select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-sm"><option value="">Select employee…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><button disabled={!staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), "Name matched.")} className="rounded-lg bg-[#1F4D47] px-3 text-sm font-semibold text-white disabled:opacity-40">Match</button></div></div>;
+  const selected = options.find((person) => person.id === staffId);
+  return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#8A8A84]">CSV name</p><b className="text-sm text-[#33332F]">{item.imported_name}</b></div><span className="rounded-full bg-[#F1F0EA] px-2.5 py-1 text-xs font-semibold text-[#55554F]">{item.site}</span></div><label className="mt-3 block text-xs font-semibold text-[#55554F]">Match to Employee ID<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"><option value="">Select the {item.site} employee record…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.employeeId ?? "ID not set"} — {person.name}</option>)}</select></label>{selected && <div className="mt-3 rounded-lg bg-[#F6F5F0] px-3 py-2 text-xs"><b>{selected.employeeId ?? "Employee ID not set"}</b> · {selected.name}<br />{selected.site}</div>}<button disabled={!staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), `Matched ${item.imported_name} to ${selected?.employeeId ?? "employee record"}.`)} className="mt-3 w-full rounded-xl bg-[#1F4D47] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Confirm site-specific match</button></div>;
 }
 
 function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom, setEffectiveFrom, run }: {
