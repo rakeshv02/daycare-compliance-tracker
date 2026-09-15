@@ -83,6 +83,7 @@ function LeaveCalendar({ requests }: { requests: LeaveRequest[] }) {
     peopleOut: new Set(requestsForDay(day).map((request) => request.staffId)).size,
   }));
   const peak = activeDays.reduce((best, current) => current.peopleOut > best.peopleOut ? current : best, { day: 0, requests: [] as LeaveRequest[], peopleOut: 0 });
+  const leaveDaysShown = activeDays.reduce((total, day) => total + day.requests.length, 0);
   const monthLabel = firstDay.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
@@ -96,7 +97,7 @@ function LeaveCalendar({ requests }: { requests: LeaveRequest[] }) {
     </div>
     <div className="mb-4 grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl bg-[#F4F3EE] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Month</div><div className="mt-1 font-semibold text-[#1F4D47]">{monthLabel}</div></div>
-      <div className="rounded-xl bg-[#EAF5F0] p-3"><div className="text-xs font-semibold uppercase text-[#4A7568]">Leave requests shown</div><div className="mt-1 font-semibold text-[#1F4D47]">{visibleRequests.filter((request) => request.dateFrom.slice(0, 7) <= month && request.dateTo.slice(0, 7) >= month).length}</div></div>
+      <div className="rounded-xl bg-[#EAF5F0] p-3"><div className="text-xs font-semibold uppercase text-[#4A7568]">Leave days shown</div><div className="mt-1 font-semibold text-[#1F4D47]">{leaveDaysShown}</div></div>
       <div className="rounded-xl bg-[#FCF3E3] p-3"><div className="text-xs font-semibold uppercase text-[#8C6217]">Most people out</div><div className="mt-1 font-semibold text-[#6F4B0E]">{peak.peopleOut ? `${peak.peopleOut} on ${monthNumber}/${peak.day}` : "None"}</div></div>
     </div>
     <div className="mb-3 flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#2F725D]" /> Approved</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#C28A24]" /> Pending</span></div>
