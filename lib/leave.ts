@@ -49,7 +49,7 @@ export function personalAttendanceSummary(
   leaveRequests: LeaveRequest[],
 ) {
   const today = new Date().toISOString().slice(0, 10);
-  const start = year === 2026 ? "2026-09-01" : `${year}-01-01`;
+  const start = year === 2026 ? "2026-08-01" : `${year}-01-01`;
   const end = `${year}-12-31` < today ? `${year}-12-31` : today;
   const ownDays = attendanceDays.filter((day) => day.staffId === staffId && day.date >= start && day.date <= end);
   const lateDates = ownDays.filter((day) => day.exceptions.includes("Tardy")).map((day) => ({
