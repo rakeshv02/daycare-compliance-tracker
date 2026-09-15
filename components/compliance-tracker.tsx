@@ -4,7 +4,7 @@ import { useState, useMemo, useTransition } from "react";
 import { signOut } from "next-auth/react";
 import {
   ShieldCheck, Search, AlertTriangle, Clock, CheckCircle2, Building2,
-  LogOut, Car, Printer, UserX, Settings, UserPlus, Pencil, BarChart2, ShoppingCart, CalendarClock,
+  LogOut, Car, Printer, UserX, Settings, UserPlus, Pencil, BarChart2, ShoppingCart, CalendarClock, Palmtree,
 } from "lucide-react";
 import { CredentialModal } from "./credential-modal";
 import { TrainingModal } from "./training-modal";
@@ -143,6 +143,14 @@ export default function ComplianceTracker({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {sessionSite === "all" && (
+              <a
+                href={`${BASE}/dashboard/leave`}
+                className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
+              >
+                <Palmtree size={14} /> Leave
+              </a>
+            )}
             {sessionSite === "all" && (
               <a
                 href={`${BASE}/dashboard/attendance`}

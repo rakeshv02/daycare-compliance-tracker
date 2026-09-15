@@ -10,6 +10,7 @@ export const config = {
     "/dashboard/report",
     "/dashboard/report/:path*",
     "/dashboard/attendance",
+    "/dashboard/leave",
     "/dashboard/print/:path*",
     "/dashboard/orders",
     "/dashboard/orders/:path*",

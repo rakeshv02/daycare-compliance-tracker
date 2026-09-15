@@ -1,0 +1,56 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { ArrowLeft, Check, KeyRound, Search, X } from "lucide-react";
+import type { StaffMember } from "@/lib/staff";
+import type { LeaveRequest } from "@/lib/leave";
+import { weekdaysInclusive } from "@/lib/leave";
+import { decideLeaveRequest, setStaffLeavePin } from "@/lib/leave-actions";
+
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+export default function LeaveAdminManager({ roster, requests, enabledStaffIds }: {
+  roster: StaffMember[]; requests: LeaveRequest[]; enabledStaffIds: string[];
+}) {
+  const [tab, setTab] = useState<"requests" | "access">("requests");
+  const [query, setQuery] = useState("");
+  const [busy, startTransition] = useTransition();
+  const [message, setMessage] = useState("");
+  const pending = requests.filter((request) => request.status === "Pending").length;
+  const filteredRoster = useMemo(() => roster.filter((person) => person.name.toLowerCase().includes(query.toLowerCase()) || person.id.toLowerCase().includes(query.toLowerCase())), [roster, query]);
+  function run(task: () => Promise<void>, success: string) {
+    setMessage("");
+    startTransition(() => void task().then(() => setMessage(success)).catch((error) => setMessage(error instanceof Error ? error.message : "Something went wrong.")));
+  }
+  return (
+    <main className="min-h-screen bg-[#FAFAF7] p-4 sm:p-8">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <header className="flex items-center gap-3">
+          <a href={`${BASE}/dashboard`} className="rounded-xl border bg-white p-2"><ArrowLeft size={18} /></a>
+          <div><h1 className="text-2xl font-semibold text-[#1F4D47]" style={{ fontFamily: "Fredoka" }}>Staff leave management</h1><p className="text-sm text-[#74746E]">{pending} request{pending === 1 ? "" : "s"} awaiting review</p></div>
+        </header>
+        {message && <div className="rounded-xl border border-[#D8D5CB] bg-white p-3 text-sm">{message}</div>}
+        <nav className="flex w-fit gap-1 rounded-xl border bg-white p-1">
+          <button onClick={() => setTab("requests")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "requests" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Leave requests</button>
+          <button onClick={() => setTab("access")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "access" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Staff PIN access</button>
+        </nav>
+        {tab === "requests" && <div className="space-y-3">{requests.map((request) => <AdminRequest key={request.id} request={request} busy={busy} run={run} />)}{!requests.length && <Empty text="No leave requests have been submitted." />}</div>}
+        {tab === "access" && <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
+          <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Employee portal access</h2><p className="text-sm text-[#74746E]">Set or reset a private 4–8 digit PIN. Employee names and IDs come directly from the compliance roster.</p></div>
+          <div className="relative mb-4 max-w-sm"><Search className="absolute left-3 top-3 text-[#999991]" size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search employee or ID" className="w-full rounded-xl border py-2.5 pl-9 pr-3" /></div>
+          <div className="divide-y">{filteredRoster.map((person) => <PinRow key={person.id} person={person} enabled={enabledStaffIds.includes(person.id)} busy={busy} run={run} />)}</div>
+        </section>}
+      </div>
+    </main>
+  );
+}
+
+function AdminRequest({ request, busy, run }: { request: LeaveRequest; busy: boolean; run: (task: () => Promise<void>, success: string) => void }) {
+  const [note, setNote] = useState(request.directorNote);
+  return <article className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[#1F4D47]">{request.staffName}</h2><span className="rounded-full bg-[#F1F0EA] px-2 py-1 text-xs">{request.site}</span><span className="rounded-full bg-[#FCF3E3] px-2 py-1 text-xs font-semibold">{request.status}</span></div><p className="mt-2 text-sm"><b>{request.leaveType}</b> · {request.dateFrom} through {request.dateTo} · {weekdaysInclusive(request.dateFrom, request.dateTo)} weekdays</p>{request.reason && <p className="mt-2 text-sm text-[#55554F]">{request.reason}</p>}</div>{request.status === "Pending" && <div className="flex gap-2"><button disabled={busy} onClick={() => run(() => decideLeaveRequest(request.id, "Approved", note), "Request approved.")} className="flex items-center gap-1 rounded-xl bg-[#EAF5F0] px-3 py-2 text-sm font-semibold text-[#2F725D]"><Check size={15} /> Approve</button><button disabled={busy} onClick={() => run(() => decideLeaveRequest(request.id, "Denied", note), "Request denied.")} className="flex items-center gap-1 rounded-xl bg-[#FBEAE6] px-3 py-2 text-sm font-semibold text-[#A33D28]"><X size={15} /> Deny</button></div>}</div>{request.status === "Pending" ? <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note for employee" rows={2} className="mt-4 w-full rounded-xl border px-3 py-2 text-sm" /> : request.directorNote && <p className="mt-3 rounded-lg bg-[#F4F3EE] p-2 text-sm"><b>Director note:</b> {request.directorNote}</p>}</article>;
+}
+function PinRow({ person, enabled, busy, run }: { person: StaffMember; enabled: boolean; busy: boolean; run: (task: () => Promise<void>, success: string) => void }) {
+  const [pin, setPin] = useState("");
+  return <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><b className="text-sm">{person.name}</b><p className="text-xs text-[#74746E]">{person.id} · {person.site} · {enabled ? "PIN active" : "No PIN set"}</p></div><div className="flex gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0,8))} inputMode="numeric" type="password" placeholder="New PIN" className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm sm:w-36" /><button disabled={busy || pin.length < 4} onClick={() => run(async () => { await setStaffLeavePin(person.id, pin); setPin(""); }, `PIN saved for ${person.name}.`)} className="flex items-center gap-1 rounded-xl bg-[#1F4D47] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"><KeyRound size={14} /> Save</button></div></div>;
+}
+function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-[#E4E1D8] bg-white p-8 text-center text-sm text-[#74746E]">{text}</div>; }
