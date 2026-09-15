@@ -9,6 +9,7 @@ export const config = {
     "/dashboard",
     "/dashboard/report",
     "/dashboard/report/:path*",
+    "/dashboard/attendance",
     "/dashboard/print/:path*",
     "/dashboard/orders",
     "/dashboard/orders/:path*",

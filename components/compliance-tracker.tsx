@@ -4,7 +4,7 @@ import { useState, useMemo, useTransition } from "react";
 import { signOut } from "next-auth/react";
 import {
   ShieldCheck, Search, AlertTriangle, Clock, CheckCircle2, Building2,
-  LogOut, Car, Printer, UserX, Settings, UserPlus, Pencil, BarChart2, ShoppingCart,
+  LogOut, Car, Printer, UserX, Settings, UserPlus, Pencil, BarChart2, ShoppingCart, CalendarClock,
 } from "lucide-react";
 import { CredentialModal } from "./credential-modal";
 import { TrainingModal } from "./training-modal";
@@ -113,7 +113,9 @@ export default function ComplianceTracker({
   }, [STAFF, initialCredentials, initialTrainingHours, sessionSite, initialLifecycle]);
 
   function handleRoleChange(staffId: string, role: string) {
-    startTransition(() => setStaffRole(staffId, role));
+    startTransition(() => {
+      void setStaffRole(staffId, role);
+    });
   }
 
   const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -141,6 +143,14 @@ export default function ComplianceTracker({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {sessionSite === "all" && (
+              <a
+                href={`${BASE}/dashboard/attendance`}
+                className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
+              >
+                <CalendarClock size={14} /> Attendance
+              </a>
+            )}
             <a
               href={`${BASE}/dashboard/waitlist`}
               className="flex items-center gap-1.5 text-xs text-[#6B6B64] hover:text-[#33332F] transition px-3 py-2 rounded-xl hover:bg-white"
