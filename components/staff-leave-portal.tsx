@@ -8,7 +8,7 @@ import { LEAVE_TYPES, weekdaysInclusive } from "@/lib/leave";
 import { cancelLeaveRequest, staffLeaveLogout, submitLeaveRequest } from "@/lib/leave-actions";
 
 type Summary = {
-  year: number; approvedDaysTaken: number; paidVacationTaken: number; pendingDays: number;
+  year: number; approvedDaysTaken: number; vacationTaken: number; pendingDays: number;
   lateDates: { date: string; scheduled: string | null; actual: string | null }[]; missingDates: string[];
 };
 
@@ -32,7 +32,7 @@ export default function StaffLeavePortal({ staff, requests, summaries }: { staff
         </div>
         {summary && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat icon={<CalendarDays />} label="Approved days taken" value={summary.approvedDaysTaken} />
-          <Stat icon={<Palmtree />} label="Paid vacation taken" value={summary.paidVacationTaken} />
+          <Stat icon={<Palmtree />} label="Vacation taken" value={summary.vacationTaken} />
           <Stat icon={<Clock3 />} label="Late arrivals" value={summary.lateDates.length} />
           <Stat icon={<CalendarDays />} label="Missing scheduled days" value={summary.missingDates.length} alert={summary.missingDates.length > 0} />
         </div>}

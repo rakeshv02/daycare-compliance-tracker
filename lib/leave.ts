@@ -1,6 +1,6 @@
 import type { AttendanceDay, AttendanceSchedule } from "./attendance";
 
-export const LEAVE_TYPES = ["Paid vacation", "Unpaid leave", "Sick", "Bereavement", "Other"] as const;
+export const LEAVE_TYPES = ["Vacation", "Medical", "Unpaid leave", "Sick", "Bereavement", "Other"] as const;
 export const LEAVE_STATUSES = ["Pending", "Approved", "Denied", "Cancelled"] as const;
 
 export type LeaveRequest = {

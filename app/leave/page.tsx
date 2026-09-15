@@ -59,7 +59,7 @@ export default async function StaffLeavePage() {
     return {
       year,
       approvedDaysTaken: requests.reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
-      paidVacationTaken: requests.filter((r) => r.leaveType === "Paid vacation").reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
+      vacationTaken: requests.filter((r) => r.leaveType === "Vacation" || r.leaveType === "Paid vacation").reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),
       pendingDays: requests.filter((r) => r.status === "Pending").reduce((sum, request) => sum + (request.dateFrom.slice(0,4) <= String(year) && request.dateTo.slice(0,4) >= String(year) ? leaveDaysInYear({ ...request, status: "Approved" }, year, false) : 0), 0),
       ...attendance,
     };
