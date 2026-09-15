@@ -94,12 +94,12 @@ export async function setStaffLeavePin(staffId: string, pin: string) {
 
 export async function saveStaffPortalAccess(staffId: string, employeeId: string, pin: string) {
   await requireDirector();
-  if (!await validStaff(staffId)) throw new Error("Employee was not found.");
+  if (!await validStaff(staffId)) return { error: "Employee was not found." };
   const normalizedEmployeeId = employeeId.trim().toUpperCase();
   if (!/^[A-Z0-9-]{3,20}$/.test(normalizedEmployeeId)) {
-    throw new Error("Employee ID must be 3–20 letters, numbers, or hyphens.");
+    return { error: "Employee ID must be 3–20 letters, numbers, or hyphens." };
   }
-  if (pin && !/^\d{4,8}$/.test(pin)) throw new Error("PIN must contain 4–8 digits.");
+  if (pin && !/^\d{4,8}$/.test(pin)) return { error: "PIN must contain 4–8 digits." };
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -118,17 +118,18 @@ export async function saveStaffPortalAccess(staffId: string, employeeId: string,
       );
     }
     await client.query("COMMIT");
+    revalidatePath("/dashboard/leave");
+    revalidatePath("/dashboard/attendance");
+    return { ok: true };
   } catch (error) {
     await client.query("ROLLBACK");
     if (error instanceof Error && "code" in error && error.code === "23505") {
-      throw new Error("That Employee ID is already assigned to another employee.");
+      return { error: "That Employee ID is already assigned to another employee." };
     }
     throw error;
   } finally {
     client.release();
   }
-  revalidatePath("/dashboard/leave");
-  revalidatePath("/dashboard/attendance");
 }
 
 export async function submitLeaveRequest(formData: FormData) {

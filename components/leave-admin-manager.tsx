@@ -57,7 +57,11 @@ function AccessRow({ person, employeeId: initialEmployeeId, enabled }: { person:
   function save() {
     setStatus("");
     startSaving(() => void saveStaffPortalAccess(person.id, employeeId, pin)
-      .then(() => {
+      .then((result) => {
+        if (result.error) {
+          setStatus(result.error);
+          return;
+        }
         setPin("");
         setStatus("Saved");
       })
