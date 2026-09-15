@@ -135,6 +135,39 @@ export async function saveAttendanceSchedule(
   revalidatePath("/dashboard/attendance");
 }
 
+export async function saveWeekdayAttendanceSchedule(
+  staffId: string,
+  effectiveFrom: string,
+  start: string,
+  end: string,
+) {
+  await requireDirector();
+  if (!staffId || !effectiveFrom || !start || !end || start >= end) {
+    throw new Error("Choose an employee, effective date, and valid start and end times.");
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (let weekday = 1; weekday <= 5; weekday++) {
+      await client.query(
+        `INSERT INTO attendance_schedules
+          (staff_id,weekday,effective_from,scheduled_start,scheduled_end,is_workday)
+         VALUES($1,$2,$3,$4,$5,true)
+         ON CONFLICT(staff_id,weekday,effective_from) DO UPDATE SET
+           scheduled_start=$4,scheduled_end=$5,is_workday=true,updated_at=NOW()`,
+        [staffId, weekday, effectiveFrom, start, end],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  revalidatePath("/dashboard/attendance");
+}
+
 export async function classifyAttendanceDay(staffId: string, date: string, classification: string, note: string) {
   await requireDirector();
   const allowed = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];

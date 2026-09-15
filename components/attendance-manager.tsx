@@ -5,10 +5,9 @@ import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2 } 
 import type { StaffMember } from "@/lib/staff";
 import type { AttendanceDay, AttendancePunch, AttendanceSchedule } from "@/lib/attendance";
 import {
-  classifyAttendanceDay, importAttendanceCsv, matchAttendanceName, saveAttendanceSchedule,
+  classifyAttendanceDay, importAttendanceCsv, matchAttendanceName, saveWeekdayAttendanceSchedule,
 } from "@/lib/attendance-actions";
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CLASSIFICATIONS = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -155,24 +154,41 @@ function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom,
   roster: StaffMember[]; schedules: AttendanceSchedule[]; staffId: string; setStaffId: (v: string) => void;
   effectiveFrom: string; setEffectiveFrom: (v: string) => void; run: (task: () => Promise<void>, success: string) => void;
 }) {
-  return <section className="rounded-xl border border-[#E9E7DF] bg-white p-5 space-y-4">
+  const currentSchedules = schedules
+    .filter((schedule) => schedule.staffId === staffId && schedule.weekday >= 1 && schedule.weekday <= 5 && schedule.isWorkday)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  const current = currentSchedules[0];
+  return <section className="rounded-xl border border-[#E9E7DF] bg-white p-5 space-y-5">
+    <div>
+      <h2 className="font-semibold text-[#1F4D47]">Monday–Friday schedule</h2>
+      <p className="mt-1 text-sm text-[#74746E]">Set one recurring weekday schedule for this employee. Saturday and Sunday are not scheduled.</p>
+    </div>
     <div className="grid sm:grid-cols-2 gap-3">
       <label className="text-sm">Employee<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">{roster.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.site}</option>)}</select></label>
       <label className="text-sm">Effective from<input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
     </div>
-    <div className="grid md:grid-cols-2 gap-3">{DAYS.map((name, weekday) => {
-      const existing = schedules.filter((s) => s.staffId === staffId && s.weekday === weekday).sort((a,b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
-      return <ScheduleDay key={`${staffId}-${weekday}-${existing?.id ?? "new"}`} name={name} weekday={weekday} staffId={staffId} effectiveFrom={effectiveFrom} existing={existing} run={run} />;
-    })}</div>
+    <WeekdayScheduleForm
+      key={`${staffId}-${current?.id ?? "new"}`}
+      staffId={staffId}
+      effectiveFrom={effectiveFrom}
+      current={current}
+      run={run}
+    />
   </section>;
 }
 
-function ScheduleDay({ name, weekday, staffId, effectiveFrom, existing, run }: {
-  name: string; weekday: number; staffId: string; effectiveFrom: string; existing?: AttendanceSchedule;
+function WeekdayScheduleForm({ staffId, effectiveFrom, current, run }: {
+  staffId: string; effectiveFrom: string; current?: AttendanceSchedule;
   run: (task: () => Promise<void>, success: string) => void;
 }) {
-  const [workday, setWorkday] = useState(existing?.isWorkday ?? (weekday > 0 && weekday < 6));
-  const [start, setStart] = useState(existing?.start?.slice(0,5) ?? "08:00");
-  const [end, setEnd] = useState(existing?.end?.slice(0,5) ?? "17:00");
-  return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex justify-between"><b>{name}</b><label className="text-xs"><input type="checkbox" checked={workday} onChange={(e) => setWorkday(e.target.checked)} /> Workday</label></div>{workday && <div className="grid grid-cols-2 gap-2 mt-3"><input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-lg border px-2 py-1.5" /><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-lg border px-2 py-1.5" /></div>}<button onClick={() => run(() => saveAttendanceSchedule(staffId, weekday, effectiveFrom, start, end, workday), `${name} schedule saved.`)} className="mt-3 w-full rounded-lg bg-[#E8F0ED] py-2 text-sm font-semibold text-[#1F4D47]">Save {name}</button>{existing && <p className="mt-2 text-xs text-[#8A8A84]">Current version effective {existing.effectiveFrom}</p>}</div>;
+  const [start, setStart] = useState(current?.start?.slice(0,5) ?? "08:00");
+  const [end, setEnd] = useState(current?.end?.slice(0,5) ?? "17:00");
+  return <div className="rounded-xl border border-[#E9E7DF] p-4">
+    <div className="grid grid-cols-2 gap-3">
+      <label className="text-sm">Start time<input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+      <label className="text-sm">End time<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+    </div>
+    <button onClick={() => run(() => saveWeekdayAttendanceSchedule(staffId, effectiveFrom, start, end), "Monday–Friday schedule saved.")} className="mt-4 w-full rounded-lg bg-[#1F4D47] py-2.5 text-sm font-semibold text-white">Save Monday–Friday schedule</button>
+    {current && <p className="mt-2 text-xs text-[#8A8A84]">Current weekday schedule: {current.start?.slice(0,5)}–{current.end?.slice(0,5)}, effective {current.effectiveFrom}</p>}
+  </div>;
 }
