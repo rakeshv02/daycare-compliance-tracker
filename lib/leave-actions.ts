@@ -162,13 +162,15 @@ export async function cancelLeaveRequest(requestId: number) {
   revalidatePath("/dashboard/leave");
 }
 
-export async function decideLeaveRequest(requestId: number, status: "Approved" | "Denied", directorNote: string) {
+export async function decideLeaveRequest(requestId: number, status: "Approved" | "Denied", directorNote: string, isPaidVacation = false) {
   await requireDirector();
   await pool.query(
     `UPDATE staff_leave_requests
-     SET status=$2,director_note=$3,decided_at=NOW(),updated_at=NOW()
+     SET status=$2,director_note=$3,
+         is_paid_vacation=CASE WHEN $2='Approved' AND leave_type IN ('Vacation','Paid vacation') THEN $4 ELSE false END,
+         decided_at=NOW(),updated_at=NOW()
      WHERE id=$1 AND status='Pending'`,
-    [requestId, status, directorNote.trim()],
+    [requestId, status, directorNote.trim(), isPaidVacation],
   );
   revalidatePath("/leave");
   revalidatePath("/dashboard/leave");
