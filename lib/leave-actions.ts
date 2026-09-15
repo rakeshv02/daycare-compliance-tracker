@@ -21,6 +21,22 @@ async function validStaff(staffId: string) {
   return result.rowCount === 1;
 }
 
+export async function getStaffLoginMode(employeeId: string) {
+  const normalizedEmployeeId = employeeId.trim().toUpperCase();
+  if (!normalizedEmployeeId) return { error: "Enter your Employee ID." };
+  const result = await pool.query<{ has_pin: boolean }>(
+    `SELECT EXISTS(
+       SELECT 1 FROM staff_leave_access access
+       WHERE access.staff_id=ids.staff_id AND access.is_enabled=true
+     ) AS has_pin
+     FROM staff_employee_ids ids
+     WHERE ids.employee_id=$1`,
+    [normalizedEmployeeId],
+  );
+  if (!result.rows[0]) return { error: "Employee ID was not found." };
+  return { mode: result.rows[0].has_pin ? "login" as const : "setup" as const };
+}
+
 export async function staffLeaveLogin(formData: FormData) {
   const employeeId = String(formData.get("staffId") ?? "").trim().toUpperCase();
   const pin = String(formData.get("pin") ?? "");
@@ -36,6 +52,24 @@ export async function staffLeaveLogin(formData: FormData) {
     return { error: "Employee ID or PIN is incorrect." };
   }
   setLeaveSession(access.staff_id);
+  redirect("/leave");
+}
+
+export async function createStaffLeavePin(employeeId: string, pin: string, confirmation: string) {
+  const normalizedEmployeeId = employeeId.trim().toUpperCase();
+  if (!/^\d{4,8}$/.test(pin)) return { error: "PIN must contain 4–8 digits." };
+  if (pin !== confirmation) return { error: "PINs do not match." };
+  const hash = await bcrypt.hash(pin, 12);
+  const result = await pool.query<{ staff_id: string }>(
+    `INSERT INTO staff_leave_access(staff_id,pin_hash,is_enabled)
+     SELECT staff_id,$2,true FROM staff_employee_ids WHERE employee_id=$1
+     ON CONFLICT(staff_id) DO NOTHING
+     RETURNING staff_id`,
+    [normalizedEmployeeId, hash],
+  );
+  const staffId = result.rows[0]?.staff_id;
+  if (!staffId) return { error: "A PIN has already been created for this Employee ID. Return to sign in." };
+  setLeaveSession(staffId);
   redirect("/leave");
 }
 
