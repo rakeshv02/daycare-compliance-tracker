@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import pool from "@/lib/db";
 import { STAFF_BASE } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
-import { buildAttendanceDays } from "@/lib/attendance";
+import { buildAttendanceDays, isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendancePunch, AttendanceSchedule, DayClassification } from "@/lib/attendance";
 import AttendanceManager from "@/components/attendance-manager";
 
@@ -48,7 +48,7 @@ async function loadAttendance() {
   })));
   const inactive = new Set(lifecycle.rows.filter((row) => !row.is_active).map((row) => row.staff_id));
   const activeRoster = roster.filter((person) => !inactive.has(person.id));
-  const mappedPunches: AttendancePunch[] = punches.rows.map((row) => ({
+  const mappedPunches: AttendancePunch[] = punches.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)).map((row) => ({
     id: row.id, importId: row.import_id, date: row.work_date, time: row.punch_time,
     status: row.punch_status, site: row.site, importedName: row.imported_name, staffId: row.staff_id,
   }));
@@ -59,18 +59,22 @@ async function loadAttendance() {
   const mappedClassifications: DayClassification[] = classifications.rows.map((row) => ({
     staffId: row.staff_id, date: row.work_date, classification: row.classification, note: row.note,
   }));
-  const latestImportId = imports.rows[0]?.id;
+  const mappedImports = imports.rows.map((attendanceImport) => ({
+    ...attendanceImport,
+    row_count: mappedPunches.filter((punch) => punch.importId === attendanceImport.id).length,
+  }));
+  const latestImportId = mappedImports[0]?.id;
   const presentIds = new Set(mappedPunches.filter((p) => p.importId === latestImportId && p.staffId).map((p) => p.staffId));
   const latestSites = new Set(mappedPunches.filter((p) => p.importId === latestImportId).map((p) => p.site));
   const missing = activeRoster.filter((person) => latestSites.has(person.site) && !presentIds.has(person.id));
 
   return {
     roster: activeRoster,
-    imports: imports.rows,
+    imports: mappedImports,
     punches: mappedPunches,
     schedules: mappedSchedules,
     days: buildAttendanceDays(activeRoster, mappedPunches, mappedSchedules, mappedClassifications, 5),
-    unmatched: unmatched.rows,
+    unmatched: unmatched.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)),
     missing,
   };
 }

@@ -47,6 +47,12 @@ export function normalizeAttendanceName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+const IGNORED_ATTENDANCE_NAMES = new Set(["rakeshverma", "rakeshvarma", "madhuverma", "madhuvarma"]);
+
+export function isIgnoredAttendanceName(value: string) {
+  return IGNORED_ATTENDANCE_NAMES.has(normalizeAttendanceName(value));
+}
+
 function minutes(value: string | null) {
   if (!value) return null;
   const [hour, minute] = value.slice(0, 5).split(":").map(Number);

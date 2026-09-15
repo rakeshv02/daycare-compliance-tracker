@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
 import pool from "./db";
 import { authOptions } from "./auth";
-import { normalizeAttendanceName } from "./attendance";
+import { isIgnoredAttendanceName, normalizeAttendanceName } from "./attendance";
 import { STAFF_BASE } from "./staff";
 
 async function requireDirector() {
@@ -58,8 +58,8 @@ export async function importAttendanceCsv(fileName: string, text: string) {
     status: (values[index["Attendance Status"]] ?? "").trim(),
     site: (values[index.Site] ?? "").trim(),
     name: (values[index.Name] ?? "").trim(),
-  }));
-  if (!rows.length) throw new Error("The CSV contains no attendance rows.");
+  })).filter((row) => !isIgnoredAttendanceName(row.name));
+  if (!rows.length) throw new Error("The CSV contains no employee attendance rows.");
   if (rows.some((row) => !["In", "Out"].includes(row.status) || !row.site || !row.name)) throw new Error("The CSV contains an invalid status, site, or employee name.");
 
   const client = await pool.connect();
