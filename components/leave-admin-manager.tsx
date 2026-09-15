@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowLeft, Check, KeyRound, Search, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, KeyRound, Search, X } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
 import type { LeaveRequest } from "@/lib/leave";
 import { leaveDaysInYear, weekdaysInclusive } from "@/lib/leave";
@@ -12,7 +12,7 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export default function LeaveAdminManager({ roster, requests, enabledStaffIds, employeeIds }: {
   roster: StaffMember[]; requests: LeaveRequest[]; enabledStaffIds: string[]; employeeIds: Record<string, string>;
 }) {
-  const [tab, setTab] = useState<"requests" | "summary" | "history" | "access">("requests");
+  const [tab, setTab] = useState<"requests" | "calendar" | "summary" | "history" | "access">("requests");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
   const [busy, startTransition] = useTransition();
@@ -34,11 +34,13 @@ export default function LeaveAdminManager({ roster, requests, enabledStaffIds, e
         {message && <div className="rounded-xl border border-[#D8D5CB] bg-white p-3 text-sm">{message}</div>}
         <nav className="flex w-fit gap-1 rounded-xl border bg-white p-1">
           <button onClick={() => setTab("requests")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "requests" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Pending requests ({pending})</button>
+          <button onClick={() => setTab("calendar")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "calendar" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Leave calendar</button>
           <button onClick={() => setTab("summary")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "summary" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Leave summary</button>
           <button onClick={() => setTab("history")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "history" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Leave history</button>
           <button onClick={() => setTab("access")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "access" ? "bg-[#1F4D47] text-white" : "text-[#66665F]"}`}>Employee IDs & PINs</button>
         </nav>
         {tab === "requests" && <div className="space-y-3">{pendingRequests.map((request) => <AdminRequest key={request.id} request={request} busy={busy} run={run} />)}{!pendingRequests.length && <Empty text="No leave requests are awaiting review." />}</div>}
+        {tab === "calendar" && <LeaveCalendar requests={requests} />}
         {tab === "summary" && <LeaveSummary roster={roster} requests={requests} year={year} setYear={setYear} />}
         {tab === "history" && <LeaveHistory requests={requests} year={year} setYear={setYear} busy={busy} run={run} />}
         {tab === "access" && <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
@@ -49,6 +51,68 @@ export default function LeaveAdminManager({ roster, requests, enabledStaffIds, e
       </div>
     </main>
   );
+}
+
+function LeaveCalendar({ requests }: { requests: LeaveRequest[] }) {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [year, monthNumber] = month.split("-").map(Number);
+  const firstDay = new Date(year, monthNumber - 1, 1);
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+  const calendarDays: Array<number | null> = [
+    ...Array.from({ length: firstDay.getDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+  while (calendarDays.length % 7) calendarDays.push(null);
+  const visibleRequests = requests.filter((request) => request.status === "Pending" || request.status === "Approved");
+  function dateValue(day: number) {
+    return `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  function requestsForDay(day: number) {
+    const date = dateValue(day);
+    const weekday = new Date(`${date}T12:00:00`).getDay();
+    if (weekday === 0 || weekday === 6) return [];
+    return visibleRequests.filter((request) => request.dateFrom <= date && request.dateTo >= date);
+  }
+  function changeMonth(offset: number) {
+    const next = new Date(year, monthNumber - 1 + offset, 1);
+    setMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
+  }
+  const activeDays = Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => ({
+    day,
+    requests: requestsForDay(day),
+    peopleOut: new Set(requestsForDay(day).map((request) => request.staffId)).size,
+  }));
+  const peak = activeDays.reduce((best, current) => current.peopleOut > best.peopleOut ? current : best, { day: 0, requests: [] as LeaveRequest[], peopleOut: 0 });
+  const monthLabel = firstDay.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  return <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div><h2 className="font-semibold text-[#1F4D47]">Monthly staffing calendar</h2><p className="text-sm text-[#74746E]">Pending and approved weekday leave. Denied and cancelled requests are excluded.</p></div>
+      <div className="flex items-center gap-2">
+        <button aria-label="Previous month" onClick={() => changeMonth(-1)} className="rounded-xl border p-2 text-[#1F4D47]"><ChevronLeft size={18} /></button>
+        <input aria-label="Calendar month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+        <button aria-label="Next month" onClick={() => changeMonth(1)} className="rounded-xl border p-2 text-[#1F4D47]"><ChevronRight size={18} /></button>
+      </div>
+    </div>
+    <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="rounded-xl bg-[#F4F3EE] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Month</div><div className="mt-1 font-semibold text-[#1F4D47]">{monthLabel}</div></div>
+      <div className="rounded-xl bg-[#EAF5F0] p-3"><div className="text-xs font-semibold uppercase text-[#4A7568]">Leave requests shown</div><div className="mt-1 font-semibold text-[#1F4D47]">{visibleRequests.filter((request) => request.dateFrom.slice(0, 7) <= month && request.dateTo.slice(0, 7) >= month).length}</div></div>
+      <div className="rounded-xl bg-[#FCF3E3] p-3"><div className="text-xs font-semibold uppercase text-[#8C6217]">Most people out</div><div className="mt-1 font-semibold text-[#6F4B0E]">{peak.peopleOut ? `${peak.peopleOut} on ${monthNumber}/${peak.day}` : "None"}</div></div>
+    </div>
+    <div className="mb-3 flex flex-wrap gap-3 text-xs"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#2F725D]" /> Approved</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#C28A24]" /> Pending</span></div>
+    <div className="overflow-x-auto rounded-xl border border-[#E4E1D8]">
+      <div className="min-w-[900px]">
+        <div className="grid grid-cols-7 border-b bg-[#F4F3EE]">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day) => <div key={day} className="px-3 py-2 text-center text-xs font-semibold uppercase text-[#74746E]">{day}</div>)}</div>
+        <div className="grid grid-cols-7">{calendarDays.map((day, index) => {
+          const dayRequests = day ? requestsForDay(day) : [];
+          const peopleOut = new Set(dayRequests.map((request) => request.staffId)).size;
+          return <div key={`${day ?? "empty"}-${index}`} className={`min-h-36 border-b border-r p-2 ${day ? "bg-white" : "bg-[#FAFAF7]"} ${index % 7 === 6 ? "border-r-0" : ""}`}>
+            {day && <><div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold text-[#55554F]">{day}</span>{peopleOut > 0 && <span className="rounded-full bg-[#1F4D47] px-2 py-0.5 text-[11px] font-semibold text-white">{peopleOut} out</span>}</div><div className="space-y-1.5">{dayRequests.map((request) => <div key={request.id} className={`rounded-lg border-l-4 px-2 py-1.5 text-xs ${request.status === "Approved" ? "border-[#2F725D] bg-[#EAF5F0]" : "border-[#C28A24] bg-[#FCF3E3]"}`}><div className="font-semibold text-[#33332F]">{request.staffName}</div><div className="truncate text-[11px] text-[#66665F]">{request.site} · {request.status}</div></div>)}</div></>}
+          </div>;
+        })}</div>
+      </div>
+    </div>
+  </section>;
 }
 
 function AdminRequest({ request, busy, run }: { request: LeaveRequest; busy: boolean; run: (task: () => Promise<void>, success: string) => void }) {
