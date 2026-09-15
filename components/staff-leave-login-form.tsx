@@ -39,7 +39,7 @@ export default function StaffLeaveLoginForm() {
     >
       <label className="block text-sm font-medium text-[#33332F]">
         Employee ID
-        <input name="staffId" value={employeeId} onChange={(event) => setEmployeeId(event.target.value.toUpperCase())} disabled={mode !== "identify"} required autoCapitalize="characters" autoComplete="username" className="mt-1.5 w-full rounded-xl border border-[#DCD9CF] px-3 py-3 outline-none focus:border-[#1F4D47] disabled:bg-[#F4F3EE]" />
+        <input name="staffId" value={employeeId} onChange={(event) => setEmployeeId(event.target.value.toUpperCase())} readOnly={mode !== "identify"} required autoCapitalize="characters" autoComplete="username" className="mt-1.5 w-full rounded-xl border border-[#DCD9CF] px-3 py-3 outline-none focus:border-[#1F4D47] read-only:bg-[#F4F3EE]" />
       </label>
       {mode === "setup" && <p className="rounded-lg bg-[#EAF5F0] px-3 py-2 text-sm text-[#2F725D]">First login: create your private 4–8 digit PIN.</p>}
       {mode !== "identify" && <label className="block text-sm font-medium text-[#33332F]">
