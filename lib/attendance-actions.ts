@@ -181,24 +181,45 @@ export async function deleteWeekdayAttendanceSchedule(staffId: string, effective
 
 export async function saveAttendanceScheduleOverride(
   staffId: string,
-  date: string,
+  dateFrom: string,
+  dateTo: string,
   start: string,
   end: string,
   isWorkday: boolean,
   note: string,
 ) {
   await requireDirector();
-  if (!staffId || !date || (isWorkday && (!start || !end || start >= end))) {
-    throw new Error("Choose an employee, date, and valid start and end times.");
+  if (!staffId || !dateFrom || !dateTo || dateFrom > dateTo || (isWorkday && (!start || !end || start >= end))) {
+    throw new Error("Choose an employee, valid date range, and valid start and end times.");
   }
-  await pool.query(
-    `INSERT INTO attendance_schedule_overrides
-      (staff_id,work_date,scheduled_start,scheduled_end,is_workday,note)
-     VALUES($1,$2,$3,$4,$5,$6)
-     ON CONFLICT(staff_id,work_date) DO UPDATE SET
-       scheduled_start=$3,scheduled_end=$4,is_workday=$5,note=$6,updated_at=NOW()`,
-    [staffId, date, isWorkday ? start : null, isWorkday ? end : null, isWorkday, note.trim()],
-  );
+  const first = new Date(`${dateFrom}T12:00:00`);
+  const last = new Date(`${dateTo}T12:00:00`);
+  if ((last.getTime() - first.getTime()) / 86_400_000 > 31) throw new Error("Temporary schedule ranges cannot exceed 31 days.");
+  const dates: string[] = [];
+  for (const date = new Date(first); date <= last; date.setDate(date.getDate() + 1)) {
+    if (date.getDay() > 0 && date.getDay() < 6) dates.push(date.toISOString().slice(0, 10));
+  }
+  if (!dates.length) throw new Error("Choose a date range containing at least one weekday.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const date of dates) {
+      await client.query(
+        `INSERT INTO attendance_schedule_overrides
+          (staff_id,work_date,scheduled_start,scheduled_end,is_workday,note)
+         VALUES($1,$2,$3,$4,$5,$6)
+         ON CONFLICT(staff_id,work_date) DO UPDATE SET
+           scheduled_start=$3,scheduled_end=$4,is_workday=$5,note=$6,updated_at=NOW()`,
+        [staffId, date, isWorkday ? start : null, isWorkday ? end : null, isWorkday, note.trim()],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
   revalidatePath("/dashboard/attendance");
   revalidatePath("/leave");
 }

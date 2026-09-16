@@ -222,13 +222,15 @@ function TemporaryOverrideEditor({ staffId, schedules, overrides, run }: {
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const base = attendanceScheduleForDate(staffId, today, schedules);
-  const [date, setDate] = useState(today);
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
   const [start, setStart] = useState(base?.start?.slice(0,5) ?? "08:00");
   const [end, setEnd] = useState(base?.end?.slice(0,5) ?? "17:00");
   const [isWorkday, setIsWorkday] = useState(true);
   const [note, setNote] = useState("");
   function selectDate(value: string) {
-    setDate(value);
+    setDateFrom(value);
+    setDateTo(value);
     const existing = overrides.find((override) => override.date === value);
     const recurring = attendanceScheduleForDate(staffId, value, schedules);
     setStart(existing?.start?.slice(0,5) ?? recurring?.start?.slice(0,5) ?? "08:00");
@@ -238,15 +240,16 @@ function TemporaryOverrideEditor({ staffId, schedules, overrides, run }: {
   }
   return <div className="rounded-xl border border-[#C9DCD7] bg-[#F7FBFA] p-4">
     <h3 className="text-sm font-semibold text-[#1F4D47]">Temporary schedule override</h3>
-    <p className="mt-1 text-xs text-[#55706A]">Use this for one day only. It takes priority over the recurring schedule without changing schedule history.</p>
-    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-      <label className="text-sm">Date<input type="date" value={date} onChange={(event) => selectDate(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+    <p className="mt-1 text-xs text-[#55706A]">Use this for one day or a short date range. It takes priority over the recurring schedule without changing schedule history.</p>
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label className="text-sm">From<input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); if (dateTo < event.target.value) setDateTo(event.target.value); }} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+      <label className="text-sm">Through<input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
       <label className="text-sm">Start time<input type="time" value={start} disabled={!isWorkday} onChange={(event) => setStart(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-[#EEEDE8]" /></label>
       <label className="text-sm">End time<input type="time" value={end} disabled={!isWorkday} onChange={(event) => setEnd(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-[#EEEDE8]" /></label>
     </div>
     <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={!isWorkday} onChange={(event) => setIsWorkday(!event.target.checked)} /> Not scheduled to work on this date</label>
     <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Reason or note (optional)" className="mt-3 w-full rounded-lg border px-3 py-2 text-sm" />
-    <button onClick={() => run(() => saveAttendanceScheduleOverride(staffId, date, start, end, isWorkday, note), "Temporary schedule saved.")} className="mt-3 w-full rounded-lg bg-[#1F4D47] py-2.5 text-sm font-semibold text-white">Save temporary override</button>
+    <button onClick={() => run(() => saveAttendanceScheduleOverride(staffId, dateFrom, dateTo, start, end, isWorkday, note), "Temporary schedule saved.")} className="mt-3 w-full rounded-lg bg-[#1F4D47] py-2.5 text-sm font-semibold text-white">Save temporary override</button>
     {overrides.length > 0 && <div className="mt-4 border-t pt-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Saved temporary overrides</div><div className="mt-2 divide-y">{overrides.map((override) => <div key={override.date} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{override.date}</b> · {override.isWorkday ? `${override.start?.slice(0,5)}–${override.end?.slice(0,5)}` : "Not scheduled"}{override.note && <div className="text-xs text-[#74746E]">{override.note}</div>}</div><div className="flex gap-2"><button onClick={() => selectDate(override.date)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold text-[#1F4D47]">Edit</button><button onClick={() => { if (window.confirm(`Delete the temporary schedule for ${override.date}?`)) run(() => deleteAttendanceScheduleOverride(staffId, override.date), "Temporary schedule deleted."); }} className="flex items-center gap-1 rounded-lg border border-[#E6C9C2] px-3 py-1.5 text-xs font-semibold text-[#A33D28]"><Trash2 size={13} /> Delete</button></div></div>)}</div></div>}
   </div>;
 }
