@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
 import { isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendanceDay, AttendancePunch, AttendanceSchedule } from "@/lib/attendance";
 import {
-  classifyAttendanceDay, importAttendanceCsv, matchAttendanceName, saveWeekdayAttendanceSchedule,
+  classifyAttendanceDay, deleteWeekdayAttendanceSchedule, importAttendanceCsv, matchAttendanceName, saveWeekdayAttendanceSchedule,
 } from "@/lib/attendance-actions";
 
 const CLASSIFICATIONS = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
@@ -174,6 +174,7 @@ function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom,
     .filter((schedule) => schedule.staffId === staffId && schedule.weekday >= 1 && schedule.weekday <= 5 && schedule.isWorkday)
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
   const current = currentSchedules[0];
+  const versions = Array.from(new Map(currentSchedules.map((schedule) => [schedule.effectiveFrom, schedule])).values());
   return <section className="rounded-xl border border-[#E9E7DF] bg-white p-5 space-y-5">
     <div>
       <h2 className="font-semibold text-[#1F4D47]">Monday–Friday schedule</h2>
@@ -190,6 +191,11 @@ function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom,
       current={current}
       run={run}
     />
+    {versions.length > 0 && <div className="rounded-xl border border-[#E9E7DF] p-4">
+      <h3 className="text-sm font-semibold text-[#1F4D47]">Saved schedule versions</h3>
+      <p className="mt-1 text-xs text-[#74746E]">The version with the latest effective date overrides earlier versions from that date forward.</p>
+      <div className="mt-3 divide-y">{versions.map((version, index) => <div key={version.effectiveFrom} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{version.effectiveFrom}</b>{index === 0 && <span className="ml-2 rounded-full bg-[#EAF5F0] px-2 py-0.5 text-[11px] font-semibold text-[#2F725D]">Latest</span>}<div className="text-xs text-[#74746E]">{version.start?.slice(0,5)}–{version.end?.slice(0,5)} · Monday–Friday</div></div><button onClick={() => { if (window.confirm(`Delete the schedule effective ${version.effectiveFrom}? The previous version will apply instead.`)) run(() => deleteWeekdayAttendanceSchedule(staffId, version.effectiveFrom), "Schedule version deleted."); }} className="flex items-center justify-center gap-1.5 rounded-lg border border-[#E6C9C2] px-3 py-2 text-xs font-semibold text-[#A33D28]"><Trash2 size={14} /> Delete mistaken version</button></div>)}</div>
+    </div>}
   </section>;
 }
 

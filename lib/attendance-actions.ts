@@ -168,6 +168,17 @@ export async function saveWeekdayAttendanceSchedule(
   revalidatePath("/dashboard/attendance");
 }
 
+export async function deleteWeekdayAttendanceSchedule(staffId: string, effectiveFrom: string) {
+  await requireDirector();
+  if (!staffId || !effectiveFrom) throw new Error("Choose a valid employee schedule.");
+  await pool.query(
+    `DELETE FROM attendance_schedules
+     WHERE staff_id=$1 AND effective_from=$2 AND weekday BETWEEN 1 AND 5`,
+    [staffId, effectiveFrom],
+  );
+  revalidatePath("/dashboard/attendance");
+}
+
 export async function classifyAttendanceDay(staffId: string, date: string, classification: string, note: string) {
   await requireDirector();
   const allowed = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
