@@ -42,16 +42,20 @@ export function TrainingModal({
 
   function add() {
     if (!date || !hours) return;
-    startTransition(async () => {
-      await addTrainingEntry(staff.id, date, title, Number(hours), topic);
-      setDate(""); setTitle(""); setHours("");
+    startTransition(() => {
+      void (async () => {
+        await addTrainingEntry(staff.id, date, title, Number(hours), topic);
+        setDate(""); setTitle(""); setHours("");
+      })();
     });
   }
 
   function remove(entry: TrainingEntry) {
     if (!entry.id) return;
-    startTransition(async () => {
-      await deleteTrainingEntry(entry.id!, staff.id);
+    startTransition(() => {
+      void (async () => {
+        await deleteTrainingEntry(entry.id!, staff.id);
+      })();
     });
   }
 

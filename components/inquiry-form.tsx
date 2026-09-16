@@ -64,30 +64,32 @@ export function InquiryForm({ site, siteSlug }: { site: string; siteSlug: string
       return;
     }
     setError("");
-    startTransition(async () => {
-      try {
-        await submitInquiry(siteSlug, {
-          parentFirst,
-          parentLast,
-          phone,
-          email,
-          child1First,
-          child1Last,
-          child1Birthday,
-          child1DateNeeded,
-          child2First: showChild2 ? child2First : "",
-          child2Last: showChild2 ? child2Last : "",
-          child2Birthday: showChild2 ? child2Birthday : "",
-          child2DateNeeded: showChild2 ? child2DateNeeded : "",
-          agreedToTerms,
-        });
-        setDone(true);
-        setAgreedToTerms(false);
-      } catch (err) {
-        setError(err instanceof Error && err.message.includes("check the box")
-          ? err.message
-          : "Something went wrong submitting the form. Please try again, or call us directly.");
-      }
+    startTransition(() => {
+      void (async () => {
+        try {
+          await submitInquiry(siteSlug, {
+            parentFirst,
+            parentLast,
+            phone,
+            email,
+            child1First,
+            child1Last,
+            child1Birthday,
+            child1DateNeeded,
+            child2First: showChild2 ? child2First : "",
+            child2Last: showChild2 ? child2Last : "",
+            child2Birthday: showChild2 ? child2Birthday : "",
+            child2DateNeeded: showChild2 ? child2DateNeeded : "",
+            agreedToTerms,
+          });
+          setDone(true);
+          setAgreedToTerms(false);
+        } catch (err) {
+          setError(err instanceof Error && err.message.includes("check the box")
+            ? err.message
+            : "Something went wrong submitting the form. Please try again, or call us directly.");
+        }
+      })();
     });
   }
 

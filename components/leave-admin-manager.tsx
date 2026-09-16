@@ -4,13 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, KeyRound, Search, X } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
 import type { LeaveRequest } from "@/lib/leave";
-import { leaveDaysInYear, weekdaysInclusive } from "@/lib/leave";
+import type { AttendanceDay, AttendanceSchedule, AttendanceScheduleOverride } from "@/lib/attendance";
+import { leaveDaysInYear, personalAttendanceSummary, weekdaysInclusive } from "@/lib/leave";
 import { decideLeaveRequest, saveStaffPortalAccess, setPaidVacation } from "@/lib/leave-actions";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-export default function LeaveAdminManager({ roster, requests, enabledStaffIds, employeeIds }: {
-  roster: StaffMember[]; requests: LeaveRequest[]; enabledStaffIds: string[]; employeeIds: Record<string, string>;
+export default function LeaveAdminManager({ roster, requests, attendanceDays, schedules, scheduleOverrides, enabledStaffIds, employeeIds }: {
+  roster: StaffMember[]; requests: LeaveRequest[]; attendanceDays: AttendanceDay[]; schedules: AttendanceSchedule[];
+  scheduleOverrides: AttendanceScheduleOverride[]; enabledStaffIds: string[]; employeeIds: Record<string, string>;
 }) {
   const [tab, setTab] = useState<"requests" | "calendar" | "summary" | "history" | "access">("requests");
   const [query, setQuery] = useState("");
@@ -41,7 +43,7 @@ export default function LeaveAdminManager({ roster, requests, enabledStaffIds, e
         </nav>
         {tab === "requests" && <div className="space-y-3">{pendingRequests.map((request) => <AdminRequest key={request.id} request={request} busy={busy} run={run} />)}{!pendingRequests.length && <Empty text="No leave requests are awaiting review." />}</div>}
         {tab === "calendar" && <LeaveCalendar requests={requests} />}
-        {tab === "summary" && <LeaveSummary roster={roster} requests={requests} year={year} setYear={setYear} />}
+        {tab === "summary" && <LeaveSummary roster={roster} requests={requests} attendanceDays={attendanceDays} schedules={schedules} scheduleOverrides={scheduleOverrides} year={year} setYear={setYear} />}
         {tab === "history" && <LeaveHistory requests={requests} year={year} setYear={setYear} busy={busy} run={run} />}
         {tab === "access" && <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
           <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Employee portal access</h2><p className="text-sm text-[#74746E]">Create a unique Employee ID. On first login, the employee creates their own private PIN. Enter a new PIN here only when you need to reset it.</p></div>
@@ -122,17 +124,61 @@ function AdminRequest({ request, busy, run }: { request: LeaveRequest; busy: boo
   return <article className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[#1F4D47]">{request.staffName}</h2><span className="rounded-full bg-[#F1F0EA] px-2 py-1 text-xs">{request.site}</span><span className="rounded-full bg-[#FCF3E3] px-2 py-1 text-xs font-semibold">{request.status}</span></div><p className="mt-2 text-sm"><b>{request.isPaidVacation ? "Paid vacation" : request.leaveType}</b> · {request.dateFrom} through {request.dateTo} · {weekdaysInclusive(request.dateFrom, request.dateTo)} weekdays</p>{request.reason && <p className="mt-2 text-sm text-[#55554F]">{request.reason}</p>}</div>{request.status === "Pending" && <div className="flex gap-2"><button disabled={busy} onClick={() => run(() => decideLeaveRequest(request.id, "Approved", note, paidVacation), paidVacation ? "Paid vacation approved." : "Request approved.")} className="flex items-center gap-1 rounded-xl bg-[#EAF5F0] px-3 py-2 text-sm font-semibold text-[#2F725D]"><Check size={15} /> Approve</button><button disabled={busy} onClick={() => run(() => decideLeaveRequest(request.id, "Denied", note), "Request denied.")} className="flex items-center gap-1 rounded-xl bg-[#FBEAE6] px-3 py-2 text-sm font-semibold text-[#A33D28]"><X size={15} /> Deny</button></div>}</div>{request.status === "Pending" ? <><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note for employee" rows={2} className="mt-4 w-full rounded-xl border px-3 py-2 text-sm" />{(request.leaveType === "Vacation" || request.leaveType === "Paid vacation") && <label className="mt-3 flex items-center gap-2 rounded-xl border border-[#D8D5CB] bg-[#FAFAF7] px-3 py-3 text-sm font-semibold text-[#1F4D47]"><input type="checkbox" checked={paidVacation} onChange={(event) => setPaidVacationChoice(event.target.checked)} /> Approve as paid vacation</label>}</> : <>{request.directorNote && <p className="mt-3 rounded-lg bg-[#F4F3EE] p-2 text-sm"><b>Director note:</b> {request.directorNote}</p>}{request.status === "Approved" && (request.leaveType === "Vacation" || request.leaveType === "Paid vacation") && <label className="mt-4 flex items-center gap-2 rounded-xl border border-[#D8D5CB] bg-[#FAFAF7] px-3 py-3 text-sm font-semibold text-[#1F4D47]"><input type="checkbox" checked={request.isPaidVacation} disabled={busy} onChange={(event) => run(() => setPaidVacation(request.id, event.target.checked).then((result) => { if (result.error) throw new Error(result.error); }), event.target.checked ? "Vacation marked as paid." : "Paid vacation removed.")} /> Paid vacation</label>}</>}</article>;
 }
 
-function LeaveSummary({ roster, requests, year, setYear }: { roster: StaffMember[]; requests: LeaveRequest[]; year: number; setYear: (year: number) => void }) {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function datesInRequest(request: LeaveRequest, year: number) {
+  const dates: string[] = [];
+  const start = request.dateFrom > `${year}-01-01` ? request.dateFrom : `${year}-01-01`;
+  const end = request.dateTo < `${year}-12-31` ? request.dateTo : `${year}-12-31`;
+  const date = new Date(`${start}T12:00:00`);
+  const last = new Date(`${end}T12:00:00`);
+  while (date <= last) {
+    if (date.getDay() > 0 && date.getDay() < 6) dates.push(date.toISOString().slice(0, 10));
+    date.setDate(date.getDate() + 1);
+  }
+  return dates;
+}
+
+function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOverrides, year, setYear }: {
+  roster: StaffMember[]; requests: LeaveRequest[]; attendanceDays: AttendanceDay[]; schedules: AttendanceSchedule[];
+  scheduleOverrides: AttendanceScheduleOverride[]; year: number; setYear: (year: number) => void;
+}) {
   const [selectedStaffId, setSelectedStaffId] = useState("all");
-  const years = Array.from(new Set([new Date().getFullYear(), ...requests.flatMap((request) => [Number(request.dateFrom.slice(0, 4)), Number(request.dateTo.slice(0, 4))])])).sort((a, b) => b - a);
-  const rows = roster.filter((person) => selectedStaffId === "all" || person.id === selectedStaffId).map((person) => {
+  const [selectedSite, setSelectedSite] = useState("all");
+  const years = Array.from(new Set([new Date().getFullYear(), ...requests.flatMap((request) => [Number(request.dateFrom.slice(0, 4)), Number(request.dateTo.slice(0, 4))]), ...attendanceDays.map((day) => Number(day.date.slice(0, 4)))])).sort((a, b) => b - a);
+  const visibleRoster = roster.filter((person) => (selectedSite === "all" || person.site === selectedSite) && (selectedStaffId === "all" || person.id === selectedStaffId));
+  const currentDate = new Date();
+  const accruedMonths = year < currentDate.getFullYear() ? 12 : year > currentDate.getFullYear() ? 0 : currentDate.getMonth() + 1;
+  const rows = visibleRoster.map((person) => {
     const own = requests.filter((request) => request.staffId === person.id);
     const approved = own.filter((request) => request.status === "Approved");
     const days = (items: LeaveRequest[]) => items.reduce((sum, request) => sum + leaveDaysInYear(request, year), 0);
+    const ownAttendance = attendanceDays.filter((day) => day.staffId === person.id && day.date.startsWith(`${year}-`));
+    const personal = personalAttendanceSummary(person.id, year, attendanceDays, schedules, own, scheduleOverrides);
+    const missingScheduled = new Set(personal.missingDates);
+    const monthly = MONTHS.map((_, index) => {
+      const month = `${year}-${String(index + 1).padStart(2, "0")}`;
+      const attendance = ownAttendance.filter((day) => day.date.startsWith(month));
+      return {
+        late: attendance.filter((day) => day.exceptions.includes("Late arrival")).length,
+        early: attendance.filter((day) => day.exceptions.includes("Early departure")).length,
+        overtime: attendance.filter((day) => day.exceptions.includes("Overtime")).length,
+        missingPunch: attendance.filter((day) => day.exceptions.includes("Missing punch")).length,
+        missingDay: Array.from(missingScheduled).filter((date) => date.startsWith(month)).length,
+      };
+    });
+    const leaveDates = approved.flatMap((request) => datesInRequest(request, year).map((date) => ({ date, request }))).sort((a, b) => a.date.localeCompare(b.date));
+    const paidVacationUsed = days(approved.filter((request) => request.isPaidVacation));
+    const vacationAccrued = accruedMonths * (7 / 12);
     return {
       person,
+      monthly,
+      leaveDates,
+      vacationAccrued,
+      paidVacationUsed,
+      vacationAvailable: Math.max(0, vacationAccrued - paidVacationUsed),
       approved: days(approved),
-      paid: days(approved.filter((request) => request.isPaidVacation)),
+      paid: paidVacationUsed,
       vacation: days(approved.filter((request) => request.leaveType === "Vacation" || request.leaveType === "Paid vacation")),
       medical: days(approved.filter((request) => request.leaveType === "Medical")),
       sick: days(approved.filter((request) => request.leaveType === "Sick")),
@@ -140,7 +186,37 @@ function LeaveSummary({ roster, requests, year, setYear }: { roster: StaffMember
       pending: own.filter((request) => request.status === "Pending").length,
     };
   });
-  return <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5"><div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Employee leave summary</h2><p className="text-sm text-[#74746E]">Approved weekday totals by employee</p></div><div className="mb-4 grid gap-3 sm:grid-cols-[minmax(220px,1fr)_140px]"><label className="text-sm text-[#55554F]">Employee<select value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All employees</option>{roster.map((person) => <option key={person.id} value={person.id}>{person.name} — {person.site}</option>)}</select></label><label className="text-sm text-[#55554F]">Year<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{years.map((value) => <option key={value}>{value}</option>)}</select></label></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-[#FAFAF7] text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-3">Employee</th><th className="px-3 py-3">Approved</th><th className="px-3 py-3">Paid vacation</th><th className="px-3 py-3">Vacation</th><th className="px-3 py-3">Medical</th><th className="px-3 py-3">Sick</th><th className="px-3 py-3">Other</th><th className="px-3 py-3">Pending</th></tr></thead><tbody className="divide-y">{rows.map((row) => <tr key={row.person.id}><td className="px-3 py-3"><b>{row.person.name}</b><div className="text-xs text-[#74746E]">{row.person.site}</div></td><td className="px-3 py-3 font-semibold">{row.approved}</td><td className="px-3 py-3">{row.paid}</td><td className="px-3 py-3">{row.vacation}</td><td className="px-3 py-3">{row.medical}</td><td className="px-3 py-3">{row.sick}</td><td className="px-3 py-3">{row.other}</td><td className="px-3 py-3">{row.pending}</td></tr>)}</tbody></table></div></section>;
+  return <div className="space-y-5">
+    <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
+      <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Yearly employee summary</h2><p className="text-sm text-[#74746E]">Monthly attendance and leave totals. Select one employee when reviewing the summary with them.</p></div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-[180px_minmax(220px,1fr)_140px]">
+        <label className="text-sm text-[#55554F]">Site<select value={selectedSite} onChange={(event) => { setSelectedSite(event.target.value); setSelectedStaffId("all"); }} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All sites</option>{Array.from(new Set(roster.map((person) => person.site))).map((site) => <option key={site}>{site}</option>)}</select></label>
+        <label className="text-sm text-[#55554F]">Employee<select value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All employees</option>{roster.filter((person) => selectedSite === "all" || person.site === selectedSite).map((person) => <option key={person.id} value={person.id}>{person.name} — {person.site}</option>)}</select></label>
+        <label className="text-sm text-[#55554F]">Year<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{years.map((value) => <option key={value}>{value}</option>)}</select></label>
+      </div>
+      <div className="space-y-5">{rows.map((row) => {
+        const metrics = [
+          { label: "Late arrivals", key: "late" as const },
+          { label: "Early departures", key: "early" as const },
+          { label: "Overtime days", key: "overtime" as const },
+          { label: "Missing punches", key: "missingPunch" as const },
+          { label: "Missing scheduled days", key: "missingDay" as const },
+        ];
+        return <article key={row.person.id} className="overflow-hidden rounded-xl border border-[#E4E1D8]">
+          <div className="bg-[#F4F3EE] px-4 py-3"><b className="text-[#1F4D47]">{row.person.name}</b><span className="ml-2 text-xs text-[#74746E]">{row.person.site}</span></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-center text-sm"><thead className="border-b text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2 text-left">Attendance</th>{MONTHS.map((month) => <th key={month} className="px-2 py-2">{month}</th>)}<th className="bg-[#EAF5F0] px-3 py-2">Total</th></tr></thead><tbody className="divide-y">{metrics.map((metric) => <tr key={metric.key}><td className="px-3 py-2 text-left font-medium">{metric.label}</td>{row.monthly.map((month, index) => <td key={MONTHS[index]} className="px-2 py-2">{month[metric.key]}</td>)}<td className="bg-[#F2FAF6] px-3 py-2 font-semibold">{row.monthly.reduce((sum, month) => sum + month[metric.key], 0)}</td></tr>)}</tbody></table></div>
+        </article>;
+      })}{!rows.length && <Empty text="No employees match these filters." />}</div>
+    </section>
+    <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
+      <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Leave and vacation details</h2><p className="text-sm text-[#74746E]">Approved days off and vacation balance for {year}. Vacation accrues evenly at 7 days per year.</p></div>
+      <div className="space-y-5">{rows.map((row) => <article key={row.person.id} className="rounded-xl border border-[#E4E1D8] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><b className="text-[#1F4D47]">{row.person.name}</b><div className="text-xs text-[#74746E]">{row.person.site}</div></div><div className="text-xs text-[#74746E]">{row.approved} approved day{row.approved === 1 ? "" : "s"} off</div></div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#EAF5F0] p-3"><div className="text-xs font-semibold uppercase text-[#4A7568]">Vacation accrued</div><div className="mt-1 text-xl font-semibold text-[#1F4D47]">{row.vacationAccrued.toFixed(2)} days</div></div><div className="rounded-xl bg-[#FCF3E3] p-3"><div className="text-xs font-semibold uppercase text-[#8C6217]">Paid vacation used</div><div className="mt-1 text-xl font-semibold text-[#6F4B0E]">{row.paidVacationUsed} days</div></div><div className="rounded-xl bg-[#F4F3EE] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Available vacation</div><div className="mt-1 text-xl font-semibold text-[#1F4D47]">{row.vacationAvailable.toFixed(2)} days</div></div></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="border-b bg-[#FAFAF7] text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2">Date off</th><th className="px-3 py-2">Leave type</th><th className="px-3 py-2">Paid vacation</th><th className="px-3 py-2">Status</th></tr></thead><tbody className="divide-y">{row.leaveDates.map(({ date, request }) => <tr key={`${request.id}-${date}`}><td className="px-3 py-2">{new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td><td className="px-3 py-2">{request.leaveType}</td><td className="px-3 py-2">{request.isPaidVacation ? "1 day" : "—"}</td><td className="px-3 py-2">{request.status}</td></tr>)}{!row.leaveDates.length && <tr><td colSpan={4} className="px-3 py-5 text-center text-[#74746E]">No approved days off for {year}.</td></tr>}</tbody></table></div>
+      </article>)}</div>
+    </section>
+  </div>;
 }
 
 function LeaveHistory({ requests, year, setYear, busy, run }: {

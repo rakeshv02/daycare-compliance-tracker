@@ -29,15 +29,17 @@ export default function PendingOrdersPanel({ orders }: { orders: PendingOrder[] 
 
     setPushingId(order.id);
     setResult(null);
-    startTransition(async () => {
-      const r = await pushOrderToKroger(order.id);
-      setResult({
-        id: order.id,
-        ok: r.ok,
-        message: r.ok ? (r.skipped.length ? `Pushed to your Kroger cart. Add manually: ${r.skipped.join(", ")}` : "Pushed to your Kroger cart.") : r.error,
-      });
-      setPushingId(null);
-      router.refresh();
+    startTransition(() => {
+      void (async () => {
+        const r = await pushOrderToKroger(order.id);
+        setResult({
+          id: order.id,
+          ok: r.ok,
+          message: r.ok ? (r.skipped.length ? `Pushed to your Kroger cart. Add manually: ${r.skipped.join(", ")}` : "Pushed to your Kroger cart.") : r.error,
+        });
+        setPushingId(null);
+        router.refresh();
+      })();
     });
   }
 

@@ -34,13 +34,15 @@ export function EmployeeFormModal({
   function save() {
     if (!name.trim()) { setError("Name is required."); return; }
     setError("");
-    startTransition(async () => {
-      if (isEdit) {
-        await updateEmployee(mode.staff.id, name, site, hireDate || null, mode.isDbOnly);
-      } else {
-        await addEmployee(name, site, hireDate || null, role);
-      }
-      onClose();
+    startTransition(() => {
+      void (async () => {
+        if (isEdit) {
+          await updateEmployee(mode.staff.id, name, site, hireDate || null, mode.isDbOnly);
+        } else {
+          await addEmployee(name, site, hireDate || null, role);
+        }
+        onClose();
+      })();
     });
   }
 

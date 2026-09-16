@@ -25,9 +25,10 @@ export function CredentialModal({ staff, onClose }: { staff: StaffMember & { rol
 
   function save() {
     if (!expires) return;
-    startTransition(async () => {
-      await saveCredential(staff.id, type, issued || null, expires);
-      onClose();
+    startTransition(() => {
+      void saveCredential(staff.id, type, issued || null, expires).then(() => {
+        onClose();
+      });
     });
   }
 

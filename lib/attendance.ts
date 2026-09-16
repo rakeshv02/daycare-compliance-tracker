@@ -148,7 +148,7 @@ export function buildAttendanceDays(
       const actualEnd = minutes(lastOut);
       const scheduledStart = minutes(schedule.start);
       const scheduledEnd = minutes(schedule.end);
-      if (actualStart !== null && scheduledStart !== null && actualStart > scheduledStart + graceMinutes) exceptions.push("Tardy");
+      if (actualStart !== null && scheduledStart !== null && actualStart > scheduledStart + graceMinutes) exceptions.push("Late arrival");
       if (actualEnd !== null && scheduledEnd !== null && actualEnd < scheduledEnd) exceptions.push("Early departure");
       if (actualEnd !== null && scheduledEnd !== null && actualEnd > scheduledEnd) exceptions.push("Overtime");
     }

@@ -54,7 +54,7 @@ export function personalAttendanceSummary(
   const start = year === 2026 ? "2026-08-01" : `${year}-01-01`;
   const end = `${year}-12-31` < today ? `${year}-12-31` : today;
   const ownDays = attendanceDays.filter((day) => day.staffId === staffId && day.date >= start && day.date <= end);
-  const lateDates = ownDays.filter((day) => day.exceptions.includes("Tardy")).map((day) => ({
+  const lateDates = ownDays.filter((day) => day.exceptions.includes("Late arrival")).map((day) => ({
     date: day.date, scheduled: day.scheduledStart, actual: day.firstIn,
   }));
   const punchDates = new Set(ownDays.map((day) => day.date));

@@ -25,12 +25,14 @@ export function EmployeeDetailsModal({
   const [pending, startTransition] = useTransition();
 
   function save() {
-    startTransition(async () => {
-      await Promise.all([
-        setLifecycle(staff.id, isActive, leavingDate || null),
-        setDriverInfo(staff.id, isDriver, dlNumber || null, dlExpires || null, transportDate || null),
-      ]);
-      onClose();
+    startTransition(() => {
+      void (async () => {
+        await Promise.all([
+          setLifecycle(staff.id, isActive, leavingDate || null),
+          setDriverInfo(staff.id, isDriver, dlNumber || null, dlExpires || null, transportDate || null),
+        ]);
+        onClose();
+      })();
     });
   }
 

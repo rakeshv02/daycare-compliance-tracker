@@ -54,20 +54,22 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
   }
 
   function save() {
-    startTransition(async () => {
-      await Promise.all([
-        updateInquiryField(inquiry.id, "enrolled", enrolled),
-        updateInquiryField(inquiry.id, "start_date", startDate || null),
-        updateInquiryField(inquiry.id, "registration_type", registrationType || null),
-        updateInquiryField(inquiry.id, "assigned_classroom", assignedClassroom || null),
-        updateInquiryField(inquiry.id, "paperwork_returned_date", paperworkReturned || null),
-        updateInquiryField(inquiry.id, "teacher_notified", teacherNotified),
-        updateInquiryField(inquiry.id, "registration_paid", registrationPaid),
-        updateInquiryField(inquiry.id, "notes", notes || null),
-        updateInquiryField(inquiry.id, "ccs_approved", ccsApproved),
-      ]);
-      router.refresh();
-      onClose();
+    startTransition(() => {
+      void (async () => {
+        await Promise.all([
+          updateInquiryField(inquiry.id, "enrolled", enrolled),
+          updateInquiryField(inquiry.id, "start_date", startDate || null),
+          updateInquiryField(inquiry.id, "registration_type", registrationType || null),
+          updateInquiryField(inquiry.id, "assigned_classroom", assignedClassroom || null),
+          updateInquiryField(inquiry.id, "paperwork_returned_date", paperworkReturned || null),
+          updateInquiryField(inquiry.id, "teacher_notified", teacherNotified),
+          updateInquiryField(inquiry.id, "registration_paid", registrationPaid),
+          updateInquiryField(inquiry.id, "notes", notes || null),
+          updateInquiryField(inquiry.id, "ccs_approved", ccsApproved),
+        ]);
+        router.refresh();
+        onClose();
+      })();
     });
   }
 
@@ -79,15 +81,17 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     if (!code) return;
     setCodeError("");
     setFlagSaved(false);
-    startFlagTransition(async () => {
-      try {
-        await setFlag(inquiry.id, next, flagReason || null, code);
-        setFlagged(next);
-        setFlagSaved(true);
-        router.refresh();
-      } catch (err) {
-        setCodeError(err instanceof Error ? err.message : "Something went wrong.");
-      }
+    startFlagTransition(() => {
+      void (async () => {
+        try {
+          await setFlag(inquiry.id, next, flagReason || null, code);
+          setFlagged(next);
+          setFlagSaved(true);
+          router.refresh();
+        } catch (err) {
+          setCodeError(err instanceof Error ? err.message : "Something went wrong.");
+        }
+      })();
     });
   }
 
@@ -98,14 +102,16 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     if (!code) return;
     setCodeError("");
     setFlagSaved(false);
-    startFlagTransition(async () => {
-      try {
-        await setFlag(inquiry.id, flagged, flagReason || null, code);
-        setFlagSaved(true);
-        router.refresh();
-      } catch (err) {
-        setCodeError(err instanceof Error ? err.message : "Something went wrong.");
-      }
+    startFlagTransition(() => {
+      void (async () => {
+        try {
+          await setFlag(inquiry.id, flagged, flagReason || null, code);
+          setFlagSaved(true);
+          router.refresh();
+        } catch (err) {
+          setCodeError(err instanceof Error ? err.message : "Something went wrong.");
+        }
+      })();
     });
   }
 
@@ -113,14 +119,16 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     const code = askForCode("mark this tour complete and send the thank-you text");
     if (!code) return;
     setCodeError("");
-    startSmsTransition(async () => {
-      try {
-        const result = await markTourCompleted(inquiry.id, code);
-        setSmsResult(result.ok ? { ok: true } : { ok: false, error: result.error });
-        router.refresh();
-      } catch (err) {
-        setCodeError(err instanceof Error ? err.message : "Something went wrong.");
-      }
+    startSmsTransition(() => {
+      void (async () => {
+        try {
+          const result = await markTourCompleted(inquiry.id, code);
+          setSmsResult(result.ok ? { ok: true } : { ok: false, error: result.error });
+          router.refresh();
+        } catch (err) {
+          setCodeError(err instanceof Error ? err.message : "Something went wrong.");
+        }
+      })();
     });
   }
 
@@ -128,14 +136,16 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     const code = askForCode("send the thank-you text");
     if (!code) return;
     setCodeError("");
-    startSmsTransition(async () => {
-      try {
-        const result = await resendThankYou(inquiry.id, code);
-        setSmsResult(result.ok ? { ok: true } : { ok: false, error: result.error });
-        router.refresh();
-      } catch (err) {
-        setCodeError(err instanceof Error ? err.message : "Something went wrong.");
-      }
+    startSmsTransition(() => {
+      void (async () => {
+        try {
+          const result = await resendThankYou(inquiry.id, code);
+          setSmsResult(result.ok ? { ok: true } : { ok: false, error: result.error });
+          router.refresh();
+        } catch (err) {
+          setCodeError(err instanceof Error ? err.message : "Something went wrong.");
+        }
+      })();
     });
   }
 
@@ -144,14 +154,16 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     const code = askForCode("remove this record");
     if (!code) return;
     setCodeError("");
-    startTransition(async () => {
-      try {
-        await deleteInquiry(inquiry.id, code);
-        router.refresh();
-        onClose();
-      } catch (err) {
-        setCodeError(err instanceof Error ? err.message : "Something went wrong.");
-      }
+    startTransition(() => {
+      void (async () => {
+        try {
+          await deleteInquiry(inquiry.id, code);
+          router.refresh();
+          onClose();
+        } catch (err) {
+          setCodeError(err instanceof Error ? err.message : "Something went wrong.");
+        }
+      })();
     });
   }
 

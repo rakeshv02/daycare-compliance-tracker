@@ -88,14 +88,16 @@ export default function OrdersBoard({
   function doSearch() {
     if (!term.trim()) return;
     setSearchError("");
-    startSearch(async () => {
-      try {
-        const r = await searchKrogerProductsAction(term, activeSite);
-        setResults(r);
-      } catch (err) {
-        setSearchError(err instanceof Error ? err.message : "Search failed.");
-        setResults([]);
-      }
+    startSearch(() => {
+      void (async () => {
+        try {
+          const r = await searchKrogerProductsAction(term, activeSite);
+          setResults(r);
+        } catch (err) {
+          setSearchError(err instanceof Error ? err.message : "Search failed.");
+          setResults([]);
+        }
+      })();
     });
   }
 
@@ -139,12 +141,14 @@ export default function OrdersBoard({
 
   function saveCustomToList() {
     if (!customName.trim()) return;
-    startCustom(async () => {
-      await addCustomSavedListItem(activeSite, customName, customQty, customFrequency);
-      setCustomName("");
-      setCustomQty(1);
-      setSavedList(await getSavedListItems(activeSite));
-      setShowCustomForm(false);
+    startCustom(() => {
+      void (async () => {
+        await addCustomSavedListItem(activeSite, customName, customQty, customFrequency);
+        setCustomName("");
+        setCustomQty(1);
+        setSavedList(await getSavedListItems(activeSite));
+        setShowCustomForm(false);
+      })();
     });
   }
 
@@ -157,9 +161,11 @@ export default function OrdersBoard({
   }
 
   function removeSavedItem(id: number) {
-    startCustom(async () => {
-      await removeSavedListItemAction(id);
-      setSavedList((prev) => prev.filter((i) => i.id !== id));
+    startCustom(() => {
+      void (async () => {
+        await removeSavedListItemAction(id);
+        setSavedList((prev) => prev.filter((i) => i.id !== id));
+      })();
     });
   }
 
@@ -174,20 +180,22 @@ export default function OrdersBoard({
     if (!confirmed) return;
 
     setSubmitResult(null);
-    startSubmit(async () => {
-      const result = await submitKrogerOrder(activeSite, cart);
-      if (result.ok) {
-        setSubmitResult({
-          ok: true,
-          message: isDirector
-            ? `Submitted — find it in "Waiting for you to order" below to push it.`
-            : `Submitted for ${activeSite}. A director will place the order on Kroger shortly.`,
-        });
-        setCart(activeSite, () => []);
-        router.refresh();
-      } else {
-        setSubmitResult({ ok: false, message: result.error });
-      }
+    startSubmit(() => {
+      void (async () => {
+        const result = await submitKrogerOrder(activeSite, cart);
+        if (result.ok) {
+          setSubmitResult({
+            ok: true,
+            message: isDirector
+              ? `Submitted — find it in "Waiting for you to order" below to push it.`
+              : `Submitted for ${activeSite}. A director will place the order on Kroger shortly.`,
+          });
+          setCart(activeSite, () => []);
+          router.refresh();
+        } else {
+          setSubmitResult({ ok: false, message: result.error });
+        }
+      })();
     });
   }
 

@@ -20,20 +20,24 @@ function StoreFinder({ site, current, onSaved }: { site: Site; current: StoreCon
   function search() {
     if (!zip.trim()) return;
     setError("");
-    startSearch(async () => {
-      try {
-        setResults(await findKrogerStoresAction(zip));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Search failed.");
-      }
+    startSearch(() => {
+      void (async () => {
+        try {
+          setResults(await findKrogerStoresAction(zip));
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Search failed.");
+        }
+      })();
     });
   }
 
   function save(store: StoreResult) {
-    startSave(async () => {
-      await saveKrogerStore(site, store);
-      setResults([]);
-      onSaved();
+    startSave(() => {
+      void (async () => {
+        await saveKrogerStore(site, store);
+        setResults([]);
+        onSaved();
+      })();
     });
   }
 
