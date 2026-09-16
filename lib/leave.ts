@@ -1,4 +1,5 @@
-import type { AttendanceDay, AttendanceSchedule } from "./attendance";
+import { attendanceScheduleForDate } from "./attendance";
+import type { AttendanceDay, AttendanceSchedule, AttendanceScheduleOverride } from "./attendance";
 
 export const LEAVE_TYPES = ["Vacation", "Medical", "Unpaid leave", "Sick", "Bereavement", "Other"] as const;
 export const LEAVE_STATUSES = ["Pending", "Approved", "Denied", "Cancelled"] as const;
@@ -47,6 +48,7 @@ export function personalAttendanceSummary(
   attendanceDays: AttendanceDay[],
   schedules: AttendanceSchedule[],
   leaveRequests: LeaveRequest[],
+  overrides: AttendanceScheduleOverride[] = [],
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const start = year === 2026 ? "2026-08-01" : `${year}-01-01`;
@@ -71,10 +73,7 @@ export function personalAttendanceSummary(
     const last = new Date(`${end}T12:00:00`);
     while (date <= last) {
       const value = date.toISOString().slice(0, 10);
-      const weekday = date.getDay();
-      const schedule = schedules
-        .filter((item) => item.staffId === staffId && item.weekday === weekday && item.effectiveFrom <= value)
-        .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+      const schedule = attendanceScheduleForDate(staffId, value, schedules, overrides);
       if (schedule?.isWorkday && !punchDates.has(value) && !approvedDates.has(value)) missingDates.push(value);
       date.setDate(date.getDate() + 1);
     }

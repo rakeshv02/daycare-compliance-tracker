@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS attendance_schedules (
 CREATE INDEX IF NOT EXISTS attendance_schedules_lookup_idx
   ON attendance_schedules(staff_id, weekday, effective_from DESC);
 
+CREATE TABLE IF NOT EXISTS attendance_schedule_overrides (
+  id BIGSERIAL PRIMARY KEY,
+  staff_id TEXT NOT NULL,
+  work_date DATE NOT NULL,
+  scheduled_start TIME,
+  scheduled_end TIME,
+  is_workday BOOLEAN NOT NULL DEFAULT TRUE,
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(staff_id, work_date)
+);
+CREATE INDEX IF NOT EXISTS attendance_schedule_overrides_lookup_idx
+  ON attendance_schedule_overrides(staff_id, work_date);
+
 CREATE TABLE IF NOT EXISTS attendance_day_classifications (
   staff_id TEXT NOT NULL,
   work_date DATE NOT NULL,

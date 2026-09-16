@@ -179,6 +179,41 @@ export async function deleteWeekdayAttendanceSchedule(staffId: string, effective
   revalidatePath("/dashboard/attendance");
 }
 
+export async function saveAttendanceScheduleOverride(
+  staffId: string,
+  date: string,
+  start: string,
+  end: string,
+  isWorkday: boolean,
+  note: string,
+) {
+  await requireDirector();
+  if (!staffId || !date || (isWorkday && (!start || !end || start >= end))) {
+    throw new Error("Choose an employee, date, and valid start and end times.");
+  }
+  await pool.query(
+    `INSERT INTO attendance_schedule_overrides
+      (staff_id,work_date,scheduled_start,scheduled_end,is_workday,note)
+     VALUES($1,$2,$3,$4,$5,$6)
+     ON CONFLICT(staff_id,work_date) DO UPDATE SET
+       scheduled_start=$3,scheduled_end=$4,is_workday=$5,note=$6,updated_at=NOW()`,
+    [staffId, date, isWorkday ? start : null, isWorkday ? end : null, isWorkday, note.trim()],
+  );
+  revalidatePath("/dashboard/attendance");
+  revalidatePath("/leave");
+}
+
+export async function deleteAttendanceScheduleOverride(staffId: string, date: string) {
+  await requireDirector();
+  if (!staffId || !date) throw new Error("Choose a valid temporary schedule.");
+  await pool.query(
+    "DELETE FROM attendance_schedule_overrides WHERE staff_id=$1 AND work_date=$2",
+    [staffId, date],
+  );
+  revalidatePath("/dashboard/attendance");
+  revalidatePath("/leave");
+}
+
 export async function classifyAttendanceDay(staffId: string, date: string, classification: string, note: string) {
   await requireDirector();
   const allowed = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];

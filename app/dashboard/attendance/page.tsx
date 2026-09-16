@@ -5,11 +5,11 @@ import pool from "@/lib/db";
 import { STAFF_BASE } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
 import { buildAttendanceDays, isIgnoredAttendanceName } from "@/lib/attendance";
-import type { AttendancePunch, AttendanceSchedule, DayClassification } from "@/lib/attendance";
+import type { AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DayClassification } from "@/lib/attendance";
 import AttendanceManager from "@/components/attendance-manager";
 
 async function loadAttendance() {
-  const [dbStaff, lifecycle, employeeIds, imports, punches, schedules, classifications, unmatched] = await Promise.all([
+  const [dbStaff, lifecycle, employeeIds, imports, punches, schedules, scheduleOverrides, classifications, unmatched] = await Promise.all([
     pool.query<{ id: string; name: string; site: string; hire_date: string | null; is_db_only: boolean }>(
       "SELECT id,name,site,hire_date::text,is_db_only FROM staff_members",
     ),
@@ -29,6 +29,11 @@ async function loadAttendance() {
       scheduled_start: string | null; scheduled_end: string | null; is_workday: boolean;
     }>(`SELECT id,staff_id,weekday,effective_from::text,scheduled_start::text,scheduled_end::text,is_workday
         FROM attendance_schedules`),
+    pool.query<{
+      id: number; staff_id: string; work_date: string; scheduled_start: string | null;
+      scheduled_end: string | null; is_workday: boolean; note: string;
+    }>(`SELECT id,staff_id,work_date::text,scheduled_start::text,scheduled_end::text,is_workday,note
+        FROM attendance_schedule_overrides ORDER BY work_date`),
     pool.query<{ staff_id: string; work_date: string; classification: string; note: string }>(
       "SELECT staff_id,work_date::text,classification,note FROM attendance_day_classifications",
     ),
@@ -56,6 +61,10 @@ async function loadAttendance() {
     id: row.id, staffId: row.staff_id, weekday: row.weekday, effectiveFrom: row.effective_from,
     start: row.scheduled_start, end: row.scheduled_end, isWorkday: row.is_workday,
   }));
+  const mappedOverrides: AttendanceScheduleOverride[] = scheduleOverrides.rows.map((row) => ({
+    id: row.id, staffId: row.staff_id, date: row.work_date, start: row.scheduled_start,
+    end: row.scheduled_end, isWorkday: row.is_workday, note: row.note,
+  }));
   const mappedClassifications: DayClassification[] = classifications.rows.map((row) => ({
     staffId: row.staff_id, date: row.work_date, classification: row.classification, note: row.note,
   }));
@@ -73,7 +82,8 @@ async function loadAttendance() {
     imports: mappedImports,
     punches: mappedPunches,
     schedules: mappedSchedules,
-    days: buildAttendanceDays(activeRoster, mappedPunches, mappedSchedules, mappedClassifications, 5),
+    overrides: mappedOverrides,
+    days: buildAttendanceDays(activeRoster, mappedPunches, mappedSchedules, mappedClassifications, 5, mappedOverrides),
     unmatched: unmatched.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)),
     missing,
   };

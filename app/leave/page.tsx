@@ -3,7 +3,7 @@ import pool from "@/lib/db";
 import { getLeaveStaffId } from "@/lib/leave-auth";
 import { loadMergedRoster } from "@/lib/roster";
 import { buildAttendanceDays } from "@/lib/attendance";
-import type { AttendancePunch, AttendanceSchedule, DayClassification } from "@/lib/attendance";
+import type { AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DayClassification } from "@/lib/attendance";
 import { leaveDaysInYear, personalAttendanceSummary } from "@/lib/leave";
 import type { LeaveRequest } from "@/lib/leave";
 import StaffLeavePortal from "@/components/staff-leave-portal";
@@ -15,7 +15,7 @@ export default async function StaffLeavePage() {
   const staff = roster.find((person) => person.id === staffId);
   if (!staff) redirect("/leave/login");
 
-  const [requestRows, punchRows, scheduleRows, classificationRows] = await Promise.all([
+  const [requestRows, punchRows, scheduleRows, overrideRows, classificationRows] = await Promise.all([
     pool.query<{
       id: number; leave_type: string; is_paid_vacation: boolean; date_from: string; date_to: string; reason: string;
       status: string; director_note: string; created_at: string; decided_at: string | null;
@@ -31,6 +31,11 @@ export default async function StaffLeavePage() {
       scheduled_start: string | null; scheduled_end: string | null; is_workday: boolean;
     }>(`SELECT id,staff_id,weekday,effective_from::text,scheduled_start::text,scheduled_end::text,is_workday
         FROM attendance_schedules WHERE staff_id=$1`, [staffId]),
+    pool.query<{
+      id: number; staff_id: string; work_date: string; scheduled_start: string | null;
+      scheduled_end: string | null; is_workday: boolean; note: string;
+    }>(`SELECT id,staff_id,work_date::text,scheduled_start::text,scheduled_end::text,is_workday,note
+        FROM attendance_schedule_overrides WHERE staff_id=$1`, [staffId]),
     pool.query<{ staff_id: string; work_date: string; classification: string; note: string }>(
       "SELECT staff_id,work_date::text,classification,note FROM attendance_day_classifications WHERE staff_id=$1",
       [staffId],
@@ -50,13 +55,17 @@ export default async function StaffLeavePage() {
     id: row.id, staffId: row.staff_id, weekday: row.weekday, effectiveFrom: row.effective_from,
     start: row.scheduled_start, end: row.scheduled_end, isWorkday: row.is_workday,
   }));
+  const overrides: AttendanceScheduleOverride[] = overrideRows.rows.map((row) => ({
+    id: row.id, staffId: row.staff_id, date: row.work_date, start: row.scheduled_start,
+    end: row.scheduled_end, isWorkday: row.is_workday, note: row.note,
+  }));
   const classifications: DayClassification[] = classificationRows.rows.map((row) => ({
     staffId: row.staff_id, date: row.work_date, classification: row.classification, note: row.note,
   }));
-  const attendanceDays = buildAttendanceDays([staff], punches, schedules, classifications, 5);
+  const attendanceDays = buildAttendanceDays([staff], punches, schedules, classifications, 5, overrides);
   const years = Array.from(new Set([2026, new Date().getFullYear(), ...requests.flatMap((r) => [Number(r.dateFrom.slice(0,4)), Number(r.dateTo.slice(0,4))])])).sort((a,b) => b-a);
   const summaries = years.map((year) => {
-    const attendance = personalAttendanceSummary(staffId, year, attendanceDays, schedules, requests);
+    const attendance = personalAttendanceSummary(staffId, year, attendanceDays, schedules, requests, overrides);
     return {
       year,
       approvedDaysTaken: requests.reduce((sum, request) => sum + leaveDaysInYear(request, year, true), 0),

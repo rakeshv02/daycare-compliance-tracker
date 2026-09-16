@@ -21,6 +21,16 @@ export type AttendanceSchedule = {
   isWorkday: boolean;
 };
 
+export type AttendanceScheduleOverride = {
+  id: number;
+  staffId: string;
+  date: string;
+  start: string | null;
+  end: string | null;
+  isWorkday: boolean;
+  note: string;
+};
+
 export type DayClassification = {
   staffId: string;
   date: string;
@@ -90,12 +100,27 @@ export function totalBreakMinutes(punches: Pick<AttendancePunch, "time" | "statu
   return total;
 }
 
+export function attendanceScheduleForDate(
+  staffId: string,
+  date: string,
+  schedules: AttendanceSchedule[],
+  overrides: AttendanceScheduleOverride[] = [],
+) {
+  const override = overrides.find((item) => item.staffId === staffId && item.date === date);
+  if (override) return override;
+  const weekday = new Date(`${date}T12:00:00`).getDay();
+  return schedules
+    .filter((item) => item.staffId === staffId && item.weekday === weekday && item.effectiveFrom <= date)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+}
+
 export function buildAttendanceDays(
   staff: StaffMember[],
   punches: AttendancePunch[],
   schedules: AttendanceSchedule[],
   classifications: DayClassification[],
   graceMinutes = 5,
+  overrides: AttendanceScheduleOverride[] = [],
 ) {
   const staffMap = new Map(staff.map((person) => [person.id, person]));
   const classificationMap = new Map(classifications.map((item) => [`${item.staffId}|${item.date}`, item]));
@@ -110,10 +135,7 @@ export function buildAttendanceDays(
     const [staffId, date] = key.split("|");
     const person = staffMap.get(staffId);
     if (!person) return [];
-    const weekday = new Date(`${date}T12:00:00`).getDay();
-    const schedule = schedules
-      .filter((item) => item.staffId === staffId && item.weekday === weekday && item.effectiveFrom <= date)
-      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+    const schedule = attendanceScheduleForDate(staffId, date, schedules, overrides);
     const ins = dayPunches.filter((p) => p.status === "In").map((p) => p.time).sort();
     const outs = dayPunches.filter((p) => p.status === "Out").map((p) => p.time).sort();
     const firstIn = ins[0] ?? null;

@@ -3,10 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
-import { isIgnoredAttendanceName } from "@/lib/attendance";
-import type { AttendanceDay, AttendancePunch, AttendanceSchedule } from "@/lib/attendance";
+import { attendanceScheduleForDate, isIgnoredAttendanceName } from "@/lib/attendance";
+import type { AttendanceDay, AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride } from "@/lib/attendance";
 import {
-  classifyAttendanceDay, deleteWeekdayAttendanceSchedule, importAttendanceCsv, matchAttendanceName, saveWeekdayAttendanceSchedule,
+  classifyAttendanceDay, deleteAttendanceScheduleOverride, deleteWeekdayAttendanceSchedule, importAttendanceCsv,
+  matchAttendanceName, saveAttendanceScheduleOverride, saveWeekdayAttendanceSchedule,
 } from "@/lib/attendance-actions";
 
 const CLASSIFICATIONS = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
@@ -17,12 +18,13 @@ type Props = {
   imports: { id: number; file_name: string; period_start: string; period_end: string; row_count: number; uploaded_at: string }[];
   punches: AttendancePunch[];
   schedules: AttendanceSchedule[];
+  overrides: AttendanceScheduleOverride[];
   days: AttendanceDay[];
   unmatched: { imported_name: string; site: string }[];
   missing: StaffMember[];
 };
 
-export default function AttendanceManager({ roster, imports, schedules, days, unmatched, missing }: Props) {
+export default function AttendanceManager({ roster, imports, schedules, overrides, days, unmatched, missing }: Props) {
   const [tab, setTab] = useState<"review" | "schedule" | "reconcile">("review");
   const [busy, startTransition] = useTransition();
   const [message, setMessage] = useState("");
@@ -119,7 +121,7 @@ export default function AttendanceManager({ roster, imports, schedules, days, un
         )}
 
         {tab === "schedule" && (
-          <ScheduleEditor roster={roster} schedules={schedules} staffId={scheduleStaff} setStaffId={setScheduleStaff} effectiveFrom={effectiveFrom} setEffectiveFrom={setEffectiveFrom} run={run} />
+          <ScheduleEditor roster={roster} schedules={schedules} overrides={overrides} staffId={scheduleStaff} setStaffId={setScheduleStaff} effectiveFrom={effectiveFrom} setEffectiveFrom={setEffectiveFrom} run={run} />
         )}
 
         {tab === "reconcile" && (
@@ -166,37 +168,87 @@ function MatchRow({ item, roster, run }: { item: { imported_name: string; site: 
   return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#8A8A84]">CSV name</p><b className="text-sm text-[#33332F]">{item.imported_name}</b></div><span className="rounded-full bg-[#F1F0EA] px-2.5 py-1 text-xs font-semibold text-[#55554F]">{item.site}</span></div><label className="mt-3 block text-xs font-semibold text-[#55554F]">Match to Employee ID<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"><option value="">Select the {item.site} employee record…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.employeeId ?? "ID not set"} — {person.name}</option>)}</select></label>{selected && <div className="mt-3 rounded-lg bg-[#F6F5F0] px-3 py-2 text-xs"><b>{selected.employeeId ?? "Employee ID not set"}</b> · {selected.name}<br />{selected.site}</div>}<button disabled={!staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), `Matched ${item.imported_name} to ${selected?.employeeId ?? "employee record"}.`)} className="mt-3 w-full rounded-xl bg-[#1F4D47] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Confirm site-specific match</button></div>;
 }
 
-function ScheduleEditor({ roster, schedules, staffId, setStaffId, effectiveFrom, setEffectiveFrom, run }: {
-  roster: StaffMember[]; schedules: AttendanceSchedule[]; staffId: string; setStaffId: (v: string) => void;
+function ScheduleEditor({ roster, schedules, overrides, staffId, setStaffId, effectiveFrom, setEffectiveFrom, run }: {
+  roster: StaffMember[]; schedules: AttendanceSchedule[]; overrides: AttendanceScheduleOverride[]; staffId: string; setStaffId: (v: string) => void;
   effectiveFrom: string; setEffectiveFrom: (v: string) => void; run: (task: () => Promise<void>, success: string) => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   const currentSchedules = schedules
     .filter((schedule) => schedule.staffId === staffId && schedule.weekday >= 1 && schedule.weekday <= 5 && schedule.isWorkday)
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
-  const current = currentSchedules[0];
   const versions = Array.from(new Map(currentSchedules.map((schedule) => [schedule.effectiveFrom, schedule])).values());
+  const current = versions.find((version) => version.effectiveFrom <= today);
+  const upcoming = versions.filter((version) => version.effectiveFrom > today).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const previous = current ? versions.filter((version) => version.effectiveFrom < current.effectiveFrom) : [];
+  const editing = versions.find((version) => version.effectiveFrom === effectiveFrom) ?? current;
+  const ownOverrides = overrides.filter((override) => override.staffId === staffId).sort((a, b) => b.date.localeCompare(a.date));
   return <section className="rounded-xl border border-[#E9E7DF] bg-white p-5 space-y-5">
     <div>
       <h2 className="font-semibold text-[#1F4D47]">Monday–Friday schedule</h2>
-      <p className="mt-1 text-sm text-[#74746E]">Set one recurring weekday schedule for this employee. Saturday and Sunday are not scheduled.</p>
+      <p className="mt-1 text-sm text-[#74746E]">Manage permanent schedule changes and temporary date-specific exceptions. Saturday and Sunday are not scheduled.</p>
     </div>
     <div className="grid sm:grid-cols-2 gap-3">
       <label className="text-sm">Employee<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">{roster.map((p) => <option key={p.id} value={p.id}>{p.name}{p.employeeId ? ` (${p.employeeId})` : ""} — {p.site}</option>)}</select></label>
       <label className="text-sm">Effective from<input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
     </div>
+    <div className="grid gap-3 md:grid-cols-3">
+      <ScheduleStatus title="Current schedule" empty="No current schedule" schedules={current ? [current] : []} />
+      <ScheduleStatus title="Upcoming changes" empty="No upcoming changes" schedules={upcoming} />
+      <ScheduleStatus title="Previous schedules" empty="No previous schedules" schedules={previous} />
+    </div>
+    <div className="rounded-xl border border-[#E9E7DF] p-4">
+      <h3 className="text-sm font-semibold text-[#1F4D47]">{versions.some((version) => version.effectiveFrom === effectiveFrom) ? "Edit recurring schedule version" : "Add recurring schedule change"}</h3>
+      <p className="mt-1 text-xs text-[#74746E]">A new effective date preserves the employee’s earlier schedule. Reusing an existing date edits that version.</p>
     <WeekdayScheduleForm
-      key={`${staffId}-${current?.id ?? "new"}`}
+      key={`${staffId}-${effectiveFrom}-${editing?.id ?? "new"}`}
       staffId={staffId}
       effectiveFrom={effectiveFrom}
-      current={current}
+      current={editing}
       run={run}
     />
-    {versions.length > 0 && <div className="rounded-xl border border-[#E9E7DF] p-4">
-      <h3 className="text-sm font-semibold text-[#1F4D47]">Saved schedule versions</h3>
-      <p className="mt-1 text-xs text-[#74746E]">The version with the latest effective date overrides earlier versions from that date forward.</p>
-      <div className="mt-3 divide-y">{versions.map((version, index) => <div key={version.effectiveFrom} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{version.effectiveFrom}</b>{index === 0 && <span className="ml-2 rounded-full bg-[#EAF5F0] px-2 py-0.5 text-[11px] font-semibold text-[#2F725D]">Latest</span>}<div className="text-xs text-[#74746E]">{version.start?.slice(0,5)}–{version.end?.slice(0,5)} · Monday–Friday</div></div><button onClick={() => { if (window.confirm(`Delete the schedule effective ${version.effectiveFrom}? The previous version will apply instead.`)) run(() => deleteWeekdayAttendanceSchedule(staffId, version.effectiveFrom), "Schedule version deleted."); }} className="flex items-center justify-center gap-1.5 rounded-lg border border-[#E6C9C2] px-3 py-2 text-xs font-semibold text-[#A33D28]"><Trash2 size={14} /> Delete mistaken version</button></div>)}</div>
-    </div>}
+      {versions.length > 0 && <div className="mt-4 divide-y">{versions.map((version) => <div key={version.effectiveFrom} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{version.effectiveFrom}</b><div className="text-xs text-[#74746E]">{version.start?.slice(0,5)}–{version.end?.slice(0,5)} · Monday–Friday</div></div><div className="flex gap-2"><button onClick={() => setEffectiveFrom(version.effectiveFrom)} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#1F4D47]">Edit</button><button onClick={() => { if (window.confirm(`Delete the schedule effective ${version.effectiveFrom}? The previous version will apply instead.`)) run(() => deleteWeekdayAttendanceSchedule(staffId, version.effectiveFrom), "Schedule version deleted."); }} className="flex items-center justify-center gap-1.5 rounded-lg border border-[#E6C9C2] px-3 py-2 text-xs font-semibold text-[#A33D28]"><Trash2 size={14} /> Delete</button></div></div>)}</div>}
+    </div>
+    <TemporaryOverrideEditor key={staffId} staffId={staffId} schedules={schedules} overrides={ownOverrides} run={run} />
   </section>;
+}
+
+function ScheduleStatus({ title, empty, schedules }: { title: string; empty: string; schedules: AttendanceSchedule[] }) {
+  return <div className="rounded-xl bg-[#F6F5F0] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">{title}</div>{schedules.length ? <div className="mt-2 space-y-2">{schedules.map((schedule) => <div key={schedule.effectiveFrom} className="text-sm"><b>{schedule.start?.slice(0,5)}–{schedule.end?.slice(0,5)}</b><div className="text-xs text-[#74746E]">Effective {schedule.effectiveFrom}</div></div>)}</div> : <p className="mt-2 text-sm text-[#8A8A84]">{empty}</p>}</div>;
+}
+
+function TemporaryOverrideEditor({ staffId, schedules, overrides, run }: {
+  staffId: string; schedules: AttendanceSchedule[]; overrides: AttendanceScheduleOverride[];
+  run: (task: () => Promise<void>, success: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const base = attendanceScheduleForDate(staffId, today, schedules);
+  const [date, setDate] = useState(today);
+  const [start, setStart] = useState(base?.start?.slice(0,5) ?? "08:00");
+  const [end, setEnd] = useState(base?.end?.slice(0,5) ?? "17:00");
+  const [isWorkday, setIsWorkday] = useState(true);
+  const [note, setNote] = useState("");
+  function selectDate(value: string) {
+    setDate(value);
+    const existing = overrides.find((override) => override.date === value);
+    const recurring = attendanceScheduleForDate(staffId, value, schedules);
+    setStart(existing?.start?.slice(0,5) ?? recurring?.start?.slice(0,5) ?? "08:00");
+    setEnd(existing?.end?.slice(0,5) ?? recurring?.end?.slice(0,5) ?? "17:00");
+    setIsWorkday(existing?.isWorkday ?? true);
+    setNote(existing?.note ?? "");
+  }
+  return <div className="rounded-xl border border-[#C9DCD7] bg-[#F7FBFA] p-4">
+    <h3 className="text-sm font-semibold text-[#1F4D47]">Temporary schedule override</h3>
+    <p className="mt-1 text-xs text-[#55706A]">Use this for one day only. It takes priority over the recurring schedule without changing schedule history.</p>
+    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <label className="text-sm">Date<input type="date" value={date} onChange={(event) => selectDate(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+      <label className="text-sm">Start time<input type="time" value={start} disabled={!isWorkday} onChange={(event) => setStart(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-[#EEEDE8]" /></label>
+      <label className="text-sm">End time<input type="time" value={end} disabled={!isWorkday} onChange={(event) => setEnd(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-[#EEEDE8]" /></label>
+    </div>
+    <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={!isWorkday} onChange={(event) => setIsWorkday(!event.target.checked)} /> Not scheduled to work on this date</label>
+    <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Reason or note (optional)" className="mt-3 w-full rounded-lg border px-3 py-2 text-sm" />
+    <button onClick={() => run(() => saveAttendanceScheduleOverride(staffId, date, start, end, isWorkday, note), "Temporary schedule saved.")} className="mt-3 w-full rounded-lg bg-[#1F4D47] py-2.5 text-sm font-semibold text-white">Save temporary override</button>
+    {overrides.length > 0 && <div className="mt-4 border-t pt-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Saved temporary overrides</div><div className="mt-2 divide-y">{overrides.map((override) => <div key={override.date} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{override.date}</b> · {override.isWorkday ? `${override.start?.slice(0,5)}–${override.end?.slice(0,5)}` : "Not scheduled"}{override.note && <div className="text-xs text-[#74746E]">{override.note}</div>}</div><div className="flex gap-2"><button onClick={() => selectDate(override.date)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold text-[#1F4D47]">Edit</button><button onClick={() => { if (window.confirm(`Delete the temporary schedule for ${override.date}?`)) run(() => deleteAttendanceScheduleOverride(staffId, override.date), "Temporary schedule deleted."); }} className="flex items-center gap-1 rounded-lg border border-[#E6C9C2] px-3 py-1.5 text-xs font-semibold text-[#A33D28]"><Trash2 size={13} /> Delete</button></div></div>)}</div></div>}
+  </div>;
 }
 
 function WeekdayScheduleForm({ staffId, effectiveFrom, current, run }: {
