@@ -143,10 +143,10 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
   roster: StaffMember[]; requests: LeaveRequest[]; attendanceDays: AttendanceDay[]; schedules: AttendanceSchedule[];
   scheduleOverrides: AttendanceScheduleOverride[]; year: number; setYear: (year: number) => void;
 }) {
-  const [selectedStaffId, setSelectedStaffId] = useState("all");
+  const [selectedStaffId, setSelectedStaffId] = useState(roster[0]?.id ?? "");
   const [selectedSite, setSelectedSite] = useState("all");
   const years = Array.from(new Set([new Date().getFullYear(), ...requests.flatMap((request) => [Number(request.dateFrom.slice(0, 4)), Number(request.dateTo.slice(0, 4))]), ...attendanceDays.map((day) => Number(day.date.slice(0, 4)))])).sort((a, b) => b - a);
-  const visibleRoster = roster.filter((person) => (selectedSite === "all" || person.site === selectedSite) && (selectedStaffId === "all" || person.id === selectedStaffId));
+  const visibleRoster = roster.filter((person) => person.id === selectedStaffId);
   const currentDate = new Date();
   const accruedMonths = year < currentDate.getFullYear() ? 12 : year > currentDate.getFullYear() ? 0 : currentDate.getMonth() + 1;
   const rows = visibleRoster.map((person) => {
@@ -190,8 +190,8 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
     <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
       <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Yearly employee summary</h2><p className="text-sm text-[#74746E]">Monthly attendance and leave totals. Select one employee when reviewing the summary with them.</p></div>
       <div className="mb-5 grid gap-3 sm:grid-cols-[180px_minmax(220px,1fr)_140px]">
-        <label className="text-sm text-[#55554F]">Site<select value={selectedSite} onChange={(event) => { setSelectedSite(event.target.value); setSelectedStaffId("all"); }} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All sites</option>{Array.from(new Set(roster.map((person) => person.site))).map((site) => <option key={site}>{site}</option>)}</select></label>
-        <label className="text-sm text-[#55554F]">Employee<select value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All employees</option>{roster.filter((person) => selectedSite === "all" || person.site === selectedSite).map((person) => <option key={person.id} value={person.id}>{person.name} — {person.site}</option>)}</select></label>
+        <label className="text-sm text-[#55554F]">Site<select value={selectedSite} onChange={(event) => { const site = event.target.value; setSelectedSite(site); setSelectedStaffId(roster.find((person) => site === "all" || person.site === site)?.id ?? ""); }} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All sites</option>{Array.from(new Set(roster.map((person) => person.site))).map((site) => <option key={site}>{site}</option>)}</select></label>
+        <label className="text-sm text-[#55554F]">Employee<select value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{roster.filter((person) => selectedSite === "all" || person.site === selectedSite).map((person) => <option key={person.id} value={person.id}>{person.name} — {person.site}</option>)}</select></label>
         <label className="text-sm text-[#55554F]">Year<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{years.map((value) => <option key={value}>{value}</option>)}</select></label>
       </div>
       <div className="space-y-5">{rows.map((row) => {
