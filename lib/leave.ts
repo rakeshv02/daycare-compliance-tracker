@@ -50,9 +50,14 @@ export function personalAttendanceSummary(
   leaveRequests: LeaveRequest[],
   overrides: AttendanceScheduleOverride[] = [],
 ) {
-  const today = new Date().toISOString().slice(0, 10);
   const start = year === 2026 ? "2026-08-01" : `${year}-01-01`;
-  const end = `${year}-12-31` < today ? `${year}-12-31` : today;
+  const latestUploadedDate = attendanceDays.reduce(
+    (latest, day) => day.date > latest ? day.date : latest,
+    "",
+  );
+  const end = latestUploadedDate && latestUploadedDate < `${year}-12-31`
+    ? latestUploadedDate
+    : `${year}-12-31`;
   const ownDays = attendanceDays.filter((day) => day.staffId === staffId && day.date >= start && day.date <= end);
   const lateDates = ownDays.filter((day) => day.exceptions.includes("Late arrival")).map((day) => ({
     date: day.date, scheduled: day.scheduledStart, actual: day.firstIn,
@@ -68,7 +73,7 @@ export function personalAttendanceSummary(
     }
   }
   const missingDates: string[] = [];
-  if (start <= end) {
+  if (latestUploadedDate && start <= end) {
     const date = new Date(`${start}T12:00:00`);
     const last = new Date(`${end}T12:00:00`);
     while (date <= last) {

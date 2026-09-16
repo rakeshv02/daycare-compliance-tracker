@@ -147,8 +147,6 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
   const [selectedSite, setSelectedSite] = useState("all");
   const years = Array.from(new Set([new Date().getFullYear(), ...requests.flatMap((request) => [Number(request.dateFrom.slice(0, 4)), Number(request.dateTo.slice(0, 4))]), ...attendanceDays.map((day) => Number(day.date.slice(0, 4)))])).sort((a, b) => b - a);
   const visibleRoster = roster.filter((person) => person.id === selectedStaffId);
-  const currentDate = new Date();
-  const accruedMonths = year < currentDate.getFullYear() ? 12 : year > currentDate.getFullYear() ? 0 : currentDate.getMonth() + 1;
   const rows = visibleRoster.map((person) => {
     const own = requests.filter((request) => request.staffId === person.id);
     const approved = own.filter((request) => request.status === "Approved");
@@ -168,22 +166,11 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
       };
     });
     const leaveDates = approved.flatMap((request) => datesInRequest(request, year).map((date) => ({ date, request }))).sort((a, b) => a.date.localeCompare(b.date));
-    const paidVacationUsed = days(approved.filter((request) => request.isPaidVacation));
-    const vacationAccrued = accruedMonths * (7 / 12);
     return {
       person,
       monthly,
       leaveDates,
-      vacationAccrued,
-      paidVacationUsed,
-      vacationAvailable: Math.max(0, vacationAccrued - paidVacationUsed),
       approved: days(approved),
-      paid: paidVacationUsed,
-      vacation: days(approved.filter((request) => request.leaveType === "Vacation" || request.leaveType === "Paid vacation")),
-      medical: days(approved.filter((request) => request.leaveType === "Medical")),
-      sick: days(approved.filter((request) => request.leaveType === "Sick")),
-      other: days(approved.filter((request) => !["Vacation", "Paid vacation", "Medical", "Sick"].includes(request.leaveType))),
-      pending: own.filter((request) => request.status === "Pending").length,
     };
   });
   return <div className="space-y-5">
@@ -209,11 +196,10 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
       })}{!rows.length && <Empty text="No employees match these filters." />}</div>
     </section>
     <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
-      <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Leave and vacation details</h2><p className="text-sm text-[#74746E]">Approved days off and vacation balance for {year}. Vacation accrues evenly at 7 days per year.</p></div>
+      <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Leave details</h2><p className="text-sm text-[#74746E]">Approved days off for {year}.</p></div>
       <div className="space-y-5">{rows.map((row) => <article key={row.person.id} className="rounded-xl border border-[#E4E1D8] p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><b className="text-[#1F4D47]">{row.person.name}</b><div className="text-xs text-[#74746E]">{row.person.site}</div></div><div className="text-xs text-[#74746E]">{row.approved} approved day{row.approved === 1 ? "" : "s"} off</div></div>
-        <div className="mb-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#EAF5F0] p-3"><div className="text-xs font-semibold uppercase text-[#4A7568]">Vacation accrued</div><div className="mt-1 text-xl font-semibold text-[#1F4D47]">{row.vacationAccrued.toFixed(2)} days</div></div><div className="rounded-xl bg-[#FCF3E3] p-3"><div className="text-xs font-semibold uppercase text-[#8C6217]">Paid vacation used</div><div className="mt-1 text-xl font-semibold text-[#6F4B0E]">{row.paidVacationUsed} days</div></div><div className="rounded-xl bg-[#F4F3EE] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">Available vacation</div><div className="mt-1 text-xl font-semibold text-[#1F4D47]">{row.vacationAvailable.toFixed(2)} days</div></div></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="border-b bg-[#FAFAF7] text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2">Date off</th><th className="px-3 py-2">Leave type</th><th className="px-3 py-2">Paid vacation</th><th className="px-3 py-2">Status</th></tr></thead><tbody className="divide-y">{row.leaveDates.map(({ date, request }) => <tr key={`${request.id}-${date}`}><td className="px-3 py-2">{new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td><td className="px-3 py-2">{request.leaveType}</td><td className="px-3 py-2">{request.isPaidVacation ? "1 day" : "—"}</td><td className="px-3 py-2">{request.status}</td></tr>)}{!row.leaveDates.length && <tr><td colSpan={4} className="px-3 py-5 text-center text-[#74746E]">No approved days off for {year}.</td></tr>}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="border-b bg-[#FAFAF7] text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2">Date off</th><th className="px-3 py-2">Leave type</th><th className="px-3 py-2">Status</th></tr></thead><tbody className="divide-y">{row.leaveDates.map(({ date, request }) => <tr key={`${request.id}-${date}`}><td className="px-3 py-2">{new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td><td className="px-3 py-2">{request.leaveType}</td><td className="px-3 py-2">{request.status}</td></tr>)}{!row.leaveDates.length && <tr><td colSpan={3} className="px-3 py-5 text-center text-[#74746E]">No approved days off for {year}.</td></tr>}</tbody></table></div>
       </article>)}</div>
     </section>
   </div>;
