@@ -5,6 +5,7 @@ import pool from "@/lib/db";
 import { STAFF_BASE, SEED_CPR } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
 import ComplianceTracker from "@/components/compliance-tracker";
+import PendingLeaveNotice from "@/components/pending-leave-notice";
 
 async function loadData() {
   const [credsRows, trainingRows, rolesRows, lifecycleRows, driverRows, dbStaffRows] = await Promise.all([
@@ -89,8 +90,13 @@ export default async function DashboardPage() {
   if (!session) redirect("/login");
   const site = (session.user.site ?? "all") as import("@/lib/staff").SiteFilter;
   const { allStaff, credentials, trainingHours, roles, lifecycle, driverInfo } = await loadData();
+  const pendingLeaveIds = site === "all"
+    ? (await pool.query<{ id: string }>("SELECT id::text FROM staff_leave_requests WHERE status='Pending' ORDER BY id")).rows.map((row) => Number(row.id))
+    : [];
 
   return (
+    <>
+    {site === "all" && <PendingLeaveNotice initialIds={pendingLeaveIds} />}
     <ComplianceTracker
       allStaff={allStaff}
       initialCredentials={credentials}
@@ -100,5 +106,6 @@ export default async function DashboardPage() {
       initialDriverInfo={driverInfo}
       sessionSite={site}
     />
+    </>
   );
 }

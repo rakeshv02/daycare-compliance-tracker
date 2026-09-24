@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, KeyRound, Search, X } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
 import type { LeaveRequest } from "@/lib/leave";
@@ -14,6 +15,7 @@ export default function LeaveAdminManager({ roster, requests, attendanceDays, sc
   roster: StaffMember[]; requests: LeaveRequest[]; attendanceDays: AttendanceDay[]; schedules: AttendanceSchedule[];
   scheduleOverrides: AttendanceScheduleOverride[]; enabledStaffIds: string[]; employeeIds: Record<string, string>;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<"requests" | "calendar" | "summary" | "history" | "access">("requests");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -24,7 +26,10 @@ export default function LeaveAdminManager({ roster, requests, attendanceDays, sc
   const filteredRoster = useMemo(() => roster.filter((person) => person.name.toLowerCase().includes(query.toLowerCase()) || (employeeIds[person.id] ?? "").toLowerCase().includes(query.toLowerCase())), [roster, query, employeeIds]);
   function run(task: () => Promise<void>, success: string) {
     setMessage("");
-    startTransition(() => void task().then(() => setMessage(success)).catch((error) => setMessage(error instanceof Error ? error.message : "Something went wrong.")));
+    startTransition(() => void task().then(() => {
+      setMessage(success);
+      router.refresh();
+    }).catch((error) => setMessage(error instanceof Error ? error.message : "Something went wrong.")));
   }
   return (
     <main className="min-h-screen bg-[#FAFAF7] p-4 sm:p-8">
@@ -57,6 +62,7 @@ export default function LeaveAdminManager({ roster, requests, attendanceDays, sc
 
 function LeaveCalendar({ requests }: { requests: LeaveRequest[] }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [year, monthNumber] = month.split("-").map(Number);
   const firstDay = new Date(year, monthNumber - 1, 1);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
@@ -110,11 +116,24 @@ function LeaveCalendar({ requests }: { requests: LeaveRequest[] }) {
           const dayRequests = day ? requestsForDay(day) : [];
           const peopleOut = new Set(dayRequests.map((request) => request.staffId)).size;
           return <div key={`${day ?? "empty"}-${index}`} className={`min-h-36 border-b border-r p-2 ${day ? "bg-white" : "bg-[#FAFAF7]"} ${index % 7 === 6 ? "border-r-0" : ""}`}>
-            {day && <><div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold text-[#55554F]">{day}</span>{peopleOut > 0 && <span className="rounded-full bg-[#1F4D47] px-2 py-0.5 text-[11px] font-semibold text-white">{peopleOut} out</span>}</div><div className="space-y-1.5">{dayRequests.map((request) => <div key={request.id} className={`rounded-lg border-l-4 px-2 py-1.5 text-xs ${request.status === "Approved" ? "border-[#2F725D] bg-[#EAF5F0]" : "border-[#C28A24] bg-[#FCF3E3]"}`}><div className="font-semibold text-[#33332F]">{request.staffName}</div><div className="truncate text-[11px] text-[#66665F]">{request.site} · {request.status}</div></div>)}</div></>}
+            {day && <><div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold text-[#55554F]">{day}</span>{peopleOut > 0 && <span className="rounded-full bg-[#1F4D47] px-2 py-0.5 text-[11px] font-semibold text-white">{peopleOut} out</span>}</div><div className="space-y-1.5">{dayRequests.map((request) => <div key={request.id} className={`rounded-lg border-l-4 px-2 py-1.5 text-xs ${request.status === "Approved" ? "border-[#2F725D] bg-[#EAF5F0]" : "border-[#C28A24] bg-[#FCF3E3]"}`}><button type="button" onClick={() => setSelectedRequest(request)} className="text-left font-semibold text-[#1F4D47] underline decoration-[#8AADA3] underline-offset-2 hover:text-[#2F725D]" aria-label={`View ${request.staffName}'s leave request on ${dateValue(day)}`}>{request.staffName}</button><div className="truncate text-[11px] text-[#66665F]">{request.site} · {request.status}</div></div>)}</div></>}
           </div>;
         })}</div>
       </div>
     </div>
+    {selectedRequest && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={() => setSelectedRequest(null)}>
+      <div role="dialog" aria-modal="true" aria-labelledby="calendar-leave-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3"><h3 id="calendar-leave-title" className="text-xl font-semibold text-[#1F4D47]">{selectedRequest.staffName}</h3><button type="button" onClick={() => setSelectedRequest(null)} aria-label="Close leave details" className="rounded-lg p-1 text-[#55554F] hover:bg-[#F4F3EE]"><X size={20} /></button></div>
+        <p className="mt-1 text-sm text-[#74746E]">{selectedRequest.site}</p>
+        <dl className="mt-5 grid grid-cols-[110px_1fr] gap-x-3 gap-y-3 text-sm">
+          <dt className="font-semibold">Leave type</dt><dd>{selectedRequest.leaveType}</dd>
+          <dt className="font-semibold">Dates</dt><dd>{selectedRequest.dateFrom} through {selectedRequest.dateTo}</dd>
+          <dt className="font-semibold">Status</dt><dd>{selectedRequest.status}</dd>
+          <dt className="font-semibold">Reason or note</dt><dd className="whitespace-pre-wrap">{selectedRequest.reason || "No note provided"}</dd>
+        </dl>
+        <button type="button" onClick={() => setSelectedRequest(null)} className="mt-6 rounded-xl bg-[#1F4D47] px-4 py-2 text-sm font-semibold text-white">Close</button>
+      </div>
+    </div>}
   </section>;
 }
 

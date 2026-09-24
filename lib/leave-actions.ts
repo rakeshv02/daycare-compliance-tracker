@@ -15,6 +15,14 @@ async function requireDirector() {
   if (session?.user?.site !== "all") throw new Error("Only the director can manage leave requests.");
 }
 
+export async function getPendingLeaveRequestIds(): Promise<number[]> {
+  await requireDirector();
+  const result = await pool.query<{ id: string }>(
+    "SELECT id::text FROM staff_leave_requests WHERE status='Pending' ORDER BY id",
+  );
+  return result.rows.map((row) => Number(row.id));
+}
+
 async function validStaff(staffId: string) {
   if (STAFF_BASE.some((person) => person.id === staffId)) return true;
   const result = await pool.query("SELECT 1 FROM staff_members WHERE id=$1", [staffId]);
