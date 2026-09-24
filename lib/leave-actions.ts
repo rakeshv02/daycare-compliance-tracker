@@ -141,13 +141,36 @@ export async function submitLeaveRequest(formData: FormData) {
   const reason = String(formData.get("reason") ?? "").trim();
   if (!LEAVE_TYPES.includes(leaveType as typeof LEAVE_TYPES[number])) throw new Error("Choose a valid leave type.");
   if (!dateFrom || !dateTo || dateFrom > dateTo) throw new Error("Choose a valid date range.");
-  await pool.query(
-    `INSERT INTO staff_leave_requests(staff_id,leave_type,date_from,date_to,reason)
-     VALUES($1,$2,$3,$4,$5)`,
-    [staffId, leaveType, dateFrom, dateTo, reason],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Serialize submissions by employee so two rapid requests cannot both pass the duplicate check.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [staffId]);
+    const existing = await client.query(
+      `SELECT 1 FROM staff_leave_requests
+       WHERE staff_id=$1 AND leave_type=$2 AND date_from=$3 AND date_to=$4 AND status='Pending'
+       LIMIT 1`,
+      [staffId, leaveType, dateFrom, dateTo],
+    );
+    if (existing.rowCount) {
+      await client.query("ROLLBACK");
+      return { error: "You already have a pending request for these dates and leave type." };
+    }
+    await client.query(
+      `INSERT INTO staff_leave_requests(staff_id,leave_type,date_from,date_to,reason)
+       VALUES($1,$2,$3,$4,$5)`,
+      [staffId, leaveType, dateFrom, dateTo, reason],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
   revalidatePath("/leave");
   revalidatePath("/dashboard/leave");
+  return { ok: true };
 }
 
 export async function cancelLeaveRequest(requestId: number) {
