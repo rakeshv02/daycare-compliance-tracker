@@ -8,6 +8,9 @@ import type { LeaveRequest } from "@/lib/leave";
 import type { AttendanceDay, AttendanceSchedule, AttendanceScheduleOverride } from "@/lib/attendance";
 import { leaveDaysInYear, personalAttendanceSummary, weekdaysInclusive } from "@/lib/leave";
 import { decideLeaveRequest, saveStaffPortalAccess, setPaidVacation } from "@/lib/leave-actions";
+import { buildSummaryExceptions, EXCEPTION_TYPES } from "@/lib/leave-exceptions";
+import type { ExceptionKind } from "@/lib/leave-exceptions";
+import LeaveExceptionCalendar from "@/components/leave-exception-calendar";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -164,6 +167,8 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
 }) {
   const [selectedStaffId, setSelectedStaffId] = useState(roster[0]?.id ?? "");
   const [selectedSite, setSelectedSite] = useState("all");
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [detailFilter, setDetailFilter] = useState<{ kind: ExceptionKind; month: number | null } | null>(null);
   const years = Array.from(new Set([new Date().getFullYear(), ...requests.flatMap((request) => [Number(request.dateFrom.slice(0, 4)), Number(request.dateTo.slice(0, 4))]), ...attendanceDays.map((day) => Number(day.date.slice(0, 4)))])).sort((a, b) => b - a);
   const visibleRoster = roster.filter((person) => person.id === selectedStaffId);
   const rows = visibleRoster.map((person) => {
@@ -172,45 +177,34 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
     const days = (items: LeaveRequest[]) => items.reduce((sum, request) => sum + leaveDaysInYear(request, year), 0);
     const ownAttendance = attendanceDays.filter((day) => day.staffId === person.id && day.date.startsWith(`${year}-`));
     const personal = personalAttendanceSummary(person.id, year, attendanceDays, schedules, own, scheduleOverrides);
-    const missingScheduled = new Set(personal.missingDates);
+    const exceptions = buildSummaryExceptions(ownAttendance, personal.missingDates);
     const monthly = MONTHS.map((_, index) => {
       const month = `${year}-${String(index + 1).padStart(2, "0")}`;
-      const attendance = ownAttendance.filter((day) => day.date.startsWith(month));
-      return {
-        late: attendance.filter((day) => day.exceptions.includes("Late arrival")).length,
-        early: attendance.filter((day) => day.exceptions.includes("Early departure")).length,
-        overtime: attendance.filter((day) => day.exceptions.includes("Overtime")).length,
-        missingPunch: attendance.filter((day) => day.exceptions.includes("Missing punch")).length,
-        missingDay: Array.from(missingScheduled).filter((date) => date.startsWith(month)).length,
-      };
+      return Object.fromEntries(EXCEPTION_TYPES.map((type) => [
+        type.key, exceptions.filter((entry) => entry.kind === type.key && entry.date.startsWith(month)).length,
+      ])) as Record<ExceptionKind, number>;
     });
     const leaveDates = approved.flatMap((request) => datesInRequest(request, year).map((date) => ({ date, request }))).sort((a, b) => a.date.localeCompare(b.date));
     return {
       person,
       monthly,
+      exceptions,
       leaveDates,
       approved: days(approved),
     };
   });
   return <div className="space-y-5">
     <section className="rounded-2xl border border-[#E4E1D8] bg-white p-4 sm:p-5">
-      <div className="mb-4"><h2 className="font-semibold text-[#1F4D47]">Yearly employee summary</h2><p className="text-sm text-[#74746E]">Monthly attendance and leave totals. Select one employee when reviewing the summary with them.</p></div>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Yearly employee summary</h2><p className="text-sm text-[#74746E]">Select an exception count to view its dates, or print the selected employee’s color-coded calendar.</p></div>{rows[0] && <button type="button" onClick={() => { setDetailFilter(null); setShowCalendar(true); }} className="rounded-xl border border-[#1F4D47] px-3 py-2 text-sm font-semibold text-[#1F4D47] hover:bg-[#EAF5F0]">View / print calendar</button>}</div>
       <div className="mb-5 grid gap-3 sm:grid-cols-[180px_minmax(220px,1fr)_140px]">
         <label className="text-sm text-[#55554F]">Site<select value={selectedSite} onChange={(event) => { const site = event.target.value; setSelectedSite(site); setSelectedStaffId(roster.find((person) => site === "all" || person.site === site)?.id ?? ""); }} className="mt-1 block w-full rounded-xl border px-3 py-2.5"><option value="all">All sites</option>{Array.from(new Set(roster.map((person) => person.site))).map((site) => <option key={site}>{site}</option>)}</select></label>
         <label className="text-sm text-[#55554F]">Employee<select value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{roster.filter((person) => selectedSite === "all" || person.site === selectedSite).map((person) => <option key={person.id} value={person.id}>{person.name} — {person.site}</option>)}</select></label>
         <label className="text-sm text-[#55554F]">Year<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="mt-1 block w-full rounded-xl border px-3 py-2.5">{years.map((value) => <option key={value}>{value}</option>)}</select></label>
       </div>
       <div className="space-y-5">{rows.map((row) => {
-        const metrics = [
-          { label: "Late arrivals", key: "late" as const },
-          { label: "Early departures", key: "early" as const },
-          { label: "Overtime days", key: "overtime" as const },
-          { label: "Missing punches", key: "missingPunch" as const },
-          { label: "Missing scheduled days", key: "missingDay" as const },
-        ];
         return <article key={row.person.id} className="overflow-hidden rounded-xl border border-[#E4E1D8]">
           <div className="bg-[#F4F3EE] px-4 py-3"><b className="text-[#1F4D47]">{row.person.name}</b><span className="ml-2 text-xs text-[#74746E]">{row.person.site}</span></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-center text-sm"><thead className="border-b text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2 text-left">Attendance</th>{MONTHS.map((month) => <th key={month} className="px-2 py-2">{month}</th>)}<th className="bg-[#EAF5F0] px-3 py-2">Total</th></tr></thead><tbody className="divide-y">{metrics.map((metric) => <tr key={metric.key}><td className="px-3 py-2 text-left font-medium">{metric.label}</td>{row.monthly.map((month, index) => <td key={MONTHS[index]} className="px-2 py-2">{month[metric.key]}</td>)}<td className="bg-[#F2FAF6] px-3 py-2 font-semibold">{row.monthly.reduce((sum, month) => sum + month[metric.key], 0)}</td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-center text-sm"><thead className="border-b text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2 text-left">Attendance</th>{MONTHS.map((month) => <th key={month} className="px-2 py-2">{month}</th>)}<th className="bg-[#EAF5F0] px-3 py-2">Total</th></tr></thead><tbody className="divide-y">{EXCEPTION_TYPES.map((metric) => <tr key={metric.key}><td className="px-3 py-2 text-left font-medium">{metric.label}</td>{row.monthly.map((month, index) => <td key={MONTHS[index]} className="px-2 py-2">{month[metric.key] ? <button type="button" aria-label={`View ${metric.label.toLowerCase()} for ${MONTHS[index]} ${year}`} onClick={() => { setDetailFilter({ kind: metric.key, month: index }); setShowCalendar(true); }} className="font-semibold text-[#1F4D47] underline underline-offset-2 hover:text-[#2F725D]">{month[metric.key]}</button> : 0}</td>)}<td className="bg-[#F2FAF6] px-3 py-2 font-semibold">{row.monthly.reduce((sum, month) => sum + month[metric.key], 0) ? <button type="button" aria-label={`View all ${metric.label.toLowerCase()} for ${year}`} onClick={() => { setDetailFilter({ kind: metric.key, month: null }); setShowCalendar(true); }} className="text-[#1F4D47] underline underline-offset-2 hover:text-[#2F725D]">{row.monthly.reduce((sum, month) => sum + month[metric.key], 0)}</button> : 0}</td></tr>)}</tbody></table></div>
         </article>;
       })}{!rows.length && <Empty text="No employees match these filters." />}</div>
     </section>
@@ -221,6 +215,7 @@ function LeaveSummary({ roster, requests, attendanceDays, schedules, scheduleOve
         <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="border-b bg-[#FAFAF7] text-xs uppercase text-[#74746E]"><tr><th className="px-3 py-2">Date off</th><th className="px-3 py-2">Leave type</th><th className="px-3 py-2">Status</th></tr></thead><tbody className="divide-y">{row.leaveDates.map(({ date, request }) => <tr key={`${request.id}-${date}`}><td className="px-3 py-2">{new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td><td className="px-3 py-2">{request.leaveType}</td><td className="px-3 py-2">{request.status}</td></tr>)}{!row.leaveDates.length && <tr><td colSpan={3} className="px-3 py-5 text-center text-[#74746E]">No approved days off for {year}.</td></tr>}</tbody></table></div>
       </article>)}</div>
     </section>
+    {showCalendar && rows[0] && <LeaveExceptionCalendar name={rows[0].person.name} site={rows[0].person.site} year={year} entries={rows[0].exceptions} filter={detailFilter} onClose={() => setShowCalendar(false)} />}
   </div>;
 }
 
