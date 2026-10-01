@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import pool from "@/lib/db";
 import { STAFF_BASE } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
-import { buildAttendanceDays, isIgnoredAttendanceName } from "@/lib/attendance";
+import { buildAttendanceDays, departedAttendanceEmployees, isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DayClassification } from "@/lib/attendance";
 import AttendanceManager from "@/components/attendance-manager";
 
@@ -13,7 +13,9 @@ async function loadAttendance() {
     pool.query<{ id: string; name: string; site: string; hire_date: string | null; is_db_only: boolean }>(
       "SELECT id,name,site,hire_date::text,is_db_only FROM staff_members",
     ),
-    pool.query<{ staff_id: string; is_active: boolean }>("SELECT staff_id,is_active FROM staff_lifecycle"),
+    pool.query<{ staff_id: string; is_active: boolean; leaving_date: string | null }>(
+      "SELECT staff_id,is_active,leaving_date::text FROM staff_lifecycle",
+    ),
     pool.query<{ staff_id: string; employee_id: string }>("SELECT staff_id,employee_id FROM staff_employee_ids"),
     pool.query<{ id: number; file_name: string; period_start: string; period_end: string; row_count: number; uploaded_at: string }>(
       `SELECT id,file_name,period_start::text,period_end::text,row_count,uploaded_at::text
@@ -53,6 +55,9 @@ async function loadAttendance() {
   })));
   const inactive = new Set(lifecycle.rows.filter((row) => !row.is_active).map((row) => row.staff_id));
   const activeRoster = roster.filter((person) => !inactive.has(person.id));
+  const mappedLifecycle = lifecycle.rows.map((row) => ({
+    staffId: row.staff_id, isActive: row.is_active, leavingDate: row.leaving_date,
+  }));
   const mappedPunches: AttendancePunch[] = punches.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)).map((row) => ({
     id: row.id, importId: row.import_id, date: row.work_date, time: row.punch_time,
     status: row.punch_status, site: row.site, importedName: row.imported_name, staffId: row.staff_id,
@@ -83,9 +88,10 @@ async function loadAttendance() {
     punches: mappedPunches,
     schedules: mappedSchedules,
     overrides: mappedOverrides,
-    days: buildAttendanceDays(activeRoster, mappedPunches, mappedSchedules, mappedClassifications, 5, mappedOverrides),
+    days: buildAttendanceDays(roster, mappedPunches, mappedSchedules, mappedClassifications, 5, mappedOverrides, mappedLifecycle),
     unmatched: unmatched.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)),
     missing,
+    departed: departedAttendanceEmployees(roster, mappedLifecycle, Array.from(latestSites)),
   };
 }
 

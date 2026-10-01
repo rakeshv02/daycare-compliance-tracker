@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
-import { attendanceScheduleForDate, isIgnoredAttendanceName } from "@/lib/attendance";
-import type { AttendanceDay, AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride } from "@/lib/attendance";
+import { attendanceScheduleDefaultDate, attendanceScheduleForDate, attendanceScheduleVersionsForDate, isIgnoredAttendanceName } from "@/lib/attendance";
+import type { AttendanceDay, AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DepartedAttendanceEmployee } from "@/lib/attendance";
 import {
   classifyAttendanceDay, deleteAttendanceScheduleOverride, deleteWeekdayAttendanceSchedule, importAttendanceCsv,
-  matchAttendanceName, saveAttendanceScheduleOverride, saveWeekdayAttendanceSchedule,
+  matchAttendanceName, matchOldAttendanceEntries, saveAttendanceScheduleOverride, saveWeekdayAttendanceSchedule,
 } from "@/lib/attendance-actions";
 
 const CLASSIFICATIONS = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
@@ -22,16 +23,24 @@ type Props = {
   days: AttendanceDay[];
   unmatched: { imported_name: string; site: string }[];
   missing: StaffMember[];
+  departed: DepartedAttendanceEmployee[];
 };
 
-export default function AttendanceManager({ roster, imports, schedules, overrides, days, unmatched, missing }: Props) {
+export default function AttendanceManager({ roster, imports, schedules, overrides, days, unmatched, missing, departed }: Props) {
+  const router = useRouter();
   const [tab, setTab] = useState<"review" | "schedule" | "reconcile">("review");
   const [busy, startTransition] = useTransition();
+  const [matchingOldEntries, setMatchingOldEntries] = useState(false);
   const [message, setMessage] = useState("");
   const [month, setMonth] = useState(imports[0]?.period_end.slice(0, 7) ?? "");
   const [exceptionOnly, setExceptionOnly] = useState(true);
   const [scheduleStaff, setScheduleStaff] = useState(roster[0]?.id ?? "");
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const latestImportId = imports[0]?.id;
+  const defaultScheduleDate = attendanceScheduleDefaultDate(imports[0]?.period_start, new Date().toISOString().slice(0, 10));
+  const [effectiveFrom, setEffectiveFrom] = useState(defaultScheduleDate);
+  useEffect(() => {
+    setEffectiveFrom(defaultScheduleDate);
+  }, [latestImportId, defaultScheduleDate]);
 
   const filteredDays = useMemo(() => days.filter((day) =>
     (!month || day.date.startsWith(month)) && (!exceptionOnly || day.exceptions.length || day.classification)
@@ -52,6 +61,20 @@ export default function AttendanceManager({ roster, imports, schedules, override
     run(async () => importAttendanceCsv(file.name, await file.text()), "Attendance imported.");
   }
 
+  async function matchOldEntries() {
+    setMatchingOldEntries(true);
+    setMessage("");
+    try {
+      const result = await matchOldAttendanceEntries();
+      setMessage(`Matched ${result.matchedEntries.toLocaleString()} old entries across ${result.matchedNames} names. ${result.remainingNames} names still need manual review.`);
+      startTransition(() => router.refresh());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not match old attendance entries.");
+    } finally {
+      setMatchingOldEntries(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#FAFAF7] p-5 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-5">
@@ -69,7 +92,7 @@ export default function AttendanceManager({ roster, imports, schedules, override
           </label>
         </header>
 
-        {message && <div className="rounded-xl border border-[#D8D5CB] bg-white px-4 py-3 text-sm text-[#33332F]">{message}</div>}
+        {message && <div role="status" className="rounded-xl border border-[#D8D5CB] bg-white px-4 py-3 text-sm text-[#33332F]">{message}</div>}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Summary icon={<CalendarClock size={16} />} label="Latest import" value={imports[0] ? `${imports[0].period_start} – ${imports[0].period_end}` : "None"} />
@@ -100,7 +123,7 @@ export default function AttendanceManager({ roster, imports, schedules, override
                 <tbody className="divide-y divide-[#EEECE5]">
                   {filteredDays.map((day) => (
                     <tr key={`${day.staffId}-${day.date}`} className="align-top">
-                      <td className="px-4 py-3"><b>{day.date}</b><br />{day.staffName}<br /><span className="text-xs text-[#8A8A84]">{day.site}</span></td>
+                      <td className="px-4 py-3"><b>{day.date}</b><br />{day.staffName}{day.hasLeft && <div className="mt-1"><LeftEmployeeBadge leavingDate={day.leavingDate} /></div>}<br /><span className="text-xs text-[#8A8A84]">{day.site}</span></td>
                       <td className="px-4 py-3 whitespace-nowrap">{day.scheduledStart?.slice(0,5) ?? "—"} – {day.scheduledEnd?.slice(0,5) ?? "—"}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{day.firstIn?.slice(0,5) ?? "—"} – {day.lastOut?.slice(0,5) ?? "—"}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{formatBreak(day.breakMinutes)}</td>
@@ -121,7 +144,7 @@ export default function AttendanceManager({ roster, imports, schedules, override
         )}
 
         {tab === "schedule" && (
-          <ScheduleEditor roster={roster} schedules={schedules} overrides={overrides} staffId={scheduleStaff} setStaffId={setScheduleStaff} effectiveFrom={effectiveFrom} setEffectiveFrom={setEffectiveFrom} run={run} />
+          <ScheduleEditor roster={roster} schedules={schedules} overrides={overrides} staffId={scheduleStaff} setStaffId={setScheduleStaff} effectiveFrom={effectiveFrom} setEffectiveFrom={setEffectiveFrom} defaultDate={defaultScheduleDate} hasAttendanceImport={!!imports.length} run={run} />
         )}
 
         {tab === "reconcile" && (
@@ -129,18 +152,33 @@ export default function AttendanceManager({ roster, imports, schedules, override
             <div className="rounded-xl border border-[#C9DCD7] bg-[#EEF6F3] p-4">
               <h2 className="font-semibold text-[#1F4D47]">Match attendance by location and Employee ID</h2>
               <p className="mt-1 text-sm text-[#55706A]">Employees who work at both locations keep a separate employment record and Employee ID for each site. A CSV name can only be matched to an employee record from the same site.</p>
+              <p className="mt-2 text-sm text-[#55706A]">Match old entries checks all previous uploads. It uses saved matches or one clear name-and-site match, leaves ambiguous names for manual review, and never changes existing links. Adding a new employee also checks their older unmatched entries automatically.</p>
+              <button type="button" disabled={busy || matchingOldEntries || !visibleUnmatched.length} onClick={() => void matchOldEntries()} className="mt-3 rounded-xl bg-[#1F4D47] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+                {matchingOldEntries ? "Matching old entries…" : "Match old entries"}
+              </button>
             </div>
             <div className="grid lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)] gap-4">
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
               <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Unmatched attendance records</h2><p className="mt-1 text-sm text-[#7A7A74]">Choose the site-specific Employee ID for each imported name.</p></div><span className="rounded-full bg-[#FCF3E3] px-2.5 py-1 text-xs font-semibold text-[#8C6217]">{visibleUnmatched.length} unmatched</span></div>
               <div className="space-y-3">{visibleUnmatched.map((item) => (
-                <MatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={roster} run={run} />
+                <MatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={roster} run={run} busy={busy || matchingOldEntries} />
               ))}{!visibleUnmatched.length && <p className="text-sm text-[#4A7C68]">All imported names are matched.</p>}</div>
             </section>
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
               <h2 className="font-semibold text-[#1F4D47] mb-1">Missing from latest upload</h2>
               <p className="text-sm text-[#7A7A74] mb-4">Active roster employees at an included site with no punches in the latest file.</p>
               <div className="space-y-2">{missing.map((person) => <div key={person.id} className="rounded-lg bg-[#FCF3E3] px-3 py-2 text-sm"><b>{person.name}</b><br /><span className="text-xs">{person.employeeId ?? "Employee ID not set"} · {person.site}</span></div>)}{!missing.length && <p className="text-sm text-[#4A7C68]">No active employees are missing.</p>}</div>
+              <div className="mt-5 border-t border-[#E9E7DF] pt-4">
+                <h2 className="font-semibold text-[#1F4D47]">Left employees</h2>
+                <p className="mt-1 mb-3 text-sm text-[#7A7A74]">Marked as left in Compliance Tracker at the sites in this upload. They are not counted as missing active employees, and their past attendance remains available.</p>
+                <div className="space-y-2">
+                  {departed.map((person) => <div key={person.id} className="rounded-lg border border-[#DDDAD0] bg-[#F6F5F0] px-3 py-2 text-sm">
+                    <b>{person.name}</b><div className="mt-1"><LeftEmployeeBadge leavingDate={person.leavingDate} /></div>
+                    <span className="mt-1 block text-xs text-[#6B6B64]">{person.employeeId ?? "Employee ID not set"} · {person.site}</span>
+                  </div>)}
+                  {!departed.length && <p className="text-sm text-[#7A7A74]">No employees marked as left at the sites in this upload.</p>}
+                </div>
+              </div>
             </section>
             </div>
           </div>
@@ -148,6 +186,10 @@ export default function AttendanceManager({ roster, imports, schedules, override
       </div>
     </div>
   );
+}
+
+function LeftEmployeeBadge({ leavingDate }: { leavingDate: string | null }) {
+  return <span className="inline-block rounded-full bg-[#E8E6E0] px-2 py-1 text-xs font-semibold text-[#55554F]">Left{leavingDate ? ` · ${leavingDate}` : " · Date not recorded"}</span>;
 }
 
 function formatBreak(totalMinutes: number) {
@@ -161,39 +203,34 @@ function Summary({ icon, label, value, warn }: { icon: React.ReactNode; label: s
   return <div className={`rounded-xl border p-4 ${warn ? "border-[#E7C9A0] bg-[#FFF9EE]" : "border-[#E9E7DF] bg-white"}`}><div className="flex items-center gap-2 text-xs font-semibold uppercase text-[#6B6B64]">{icon}{label}</div><div className="mt-2 font-semibold text-[#1F4D47]">{value}</div></div>;
 }
 
-function MatchRow({ item, roster, run }: { item: { imported_name: string; site: string }; roster: StaffMember[]; run: (task: () => Promise<void>, success: string) => void }) {
+function MatchRow({ item, roster, run, busy }: { item: { imported_name: string; site: string }; roster: StaffMember[]; run: (task: () => Promise<void>, success: string) => void; busy: boolean }) {
   const [staffId, setStaffId] = useState("");
   const options = roster.filter((person) => person.site === item.site);
   const selected = options.find((person) => person.id === staffId);
-  return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#8A8A84]">CSV name</p><b className="text-sm text-[#33332F]">{item.imported_name}</b></div><span className="rounded-full bg-[#F1F0EA] px-2.5 py-1 text-xs font-semibold text-[#55554F]">{item.site}</span></div><label className="mt-3 block text-xs font-semibold text-[#55554F]">Match to Employee ID<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"><option value="">Select the {item.site} employee record…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.employeeId ?? "ID not set"} — {person.name}</option>)}</select></label>{selected && <div className="mt-3 rounded-lg bg-[#F6F5F0] px-3 py-2 text-xs"><b>{selected.employeeId ?? "Employee ID not set"}</b> · {selected.name}<br />{selected.site}</div>}<button disabled={!staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), `Matched ${item.imported_name} to ${selected?.employeeId ?? "employee record"}.`)} className="mt-3 w-full rounded-xl bg-[#1F4D47] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Confirm site-specific match</button></div>;
+  return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#8A8A84]">CSV name</p><b className="text-sm text-[#33332F]">{item.imported_name}</b></div><span className="rounded-full bg-[#F1F0EA] px-2.5 py-1 text-xs font-semibold text-[#55554F]">{item.site}</span></div><label className="mt-3 block text-xs font-semibold text-[#55554F]">Match to Employee ID<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"><option value="">Select the {item.site} employee record…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.employeeId ?? "ID not set"} — {person.name}</option>)}</select></label>{selected && <div className="mt-3 rounded-lg bg-[#F6F5F0] px-3 py-2 text-xs"><b>{selected.employeeId ?? "Employee ID not set"}</b> · {selected.name}<br />{selected.site}</div>}<button disabled={busy || !staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), `Matched ${item.imported_name} to ${selected?.employeeId ?? "employee record"}.`)} className="mt-3 w-full rounded-xl bg-[#1F4D47] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Confirm site-specific match</button></div>;
 }
 
-function ScheduleEditor({ roster, schedules, overrides, staffId, setStaffId, effectiveFrom, setEffectiveFrom, run }: {
+function ScheduleEditor({ roster, schedules, overrides, staffId, setStaffId, effectiveFrom, setEffectiveFrom, defaultDate, hasAttendanceImport, run }: {
   roster: StaffMember[]; schedules: AttendanceSchedule[]; overrides: AttendanceScheduleOverride[]; staffId: string; setStaffId: (v: string) => void;
   effectiveFrom: string; setEffectiveFrom: (v: string) => void; run: (task: () => Promise<void>, success: string) => void;
+  defaultDate: string; hasAttendanceImport: boolean;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const currentSchedules = schedules
-    .filter((schedule) => schedule.staffId === staffId && schedule.weekday >= 1 && schedule.weekday <= 5 && schedule.isWorkday)
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
-  const versions = Array.from(new Map(currentSchedules.map((schedule) => [schedule.effectiveFrom, schedule])).values());
-  const current = versions.find((version) => version.effectiveFrom <= today);
-  const upcoming = versions.filter((version) => version.effectiveFrom > today).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  const previous = current ? versions.filter((version) => version.effectiveFrom < current.effectiveFrom) : [];
+  const { versions, current, upcoming, previous } = attendanceScheduleVersionsForDate(schedules, staffId, effectiveFrom);
   const editing = versions.find((version) => version.effectiveFrom === effectiveFrom) ?? current;
   const ownOverrides = overrides.filter((override) => override.staffId === staffId).sort((a, b) => b.date.localeCompare(a.date));
   return <section className="rounded-xl border border-[#E9E7DF] bg-white p-5 space-y-5">
     <div>
       <h2 className="font-semibold text-[#1F4D47]">Monday–Friday schedule</h2>
       <p className="mt-1 text-sm text-[#74746E]">Manage permanent schedule changes and temporary date-specific exceptions. Saturday and Sunday are not scheduled.</p>
+      {hasAttendanceImport && <p className="mt-2 text-sm text-[#55706A]">The default date is {defaultDate}, the start of your latest attendance upload—not today. You can change it when needed.</p>}
     </div>
     <div className="grid sm:grid-cols-2 gap-3">
       <label className="text-sm">Employee<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">{roster.map((p) => <option key={p.id} value={p.id}>{p.name}{p.employeeId ? ` (${p.employeeId})` : ""} — {p.site}</option>)}</select></label>
       <label className="text-sm">Effective from<input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
     </div>
     <div className="grid gap-3 md:grid-cols-3">
-      <ScheduleStatus title="Current schedule" empty="No current schedule" schedules={current ? [current] : []} />
-      <ScheduleStatus title="Upcoming changes" empty="No upcoming changes" schedules={upcoming} />
+      <ScheduleStatus title={`Schedule on ${effectiveFrom || "selected date"}`} empty="No schedule effective on this date" schedules={current ? [current] : []} />
+      <ScheduleStatus title="Later changes" empty="No later changes" schedules={upcoming} />
       <ScheduleStatus title="Previous schedules" empty="No previous schedules" schedules={previous} />
     </div>
     <div className="rounded-xl border border-[#E9E7DF] p-4">
@@ -208,7 +245,7 @@ function ScheduleEditor({ roster, schedules, overrides, staffId, setStaffId, eff
     />
       {versions.length > 0 && <div className="mt-4 divide-y">{versions.map((version) => <div key={version.effectiveFrom} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><b>{version.effectiveFrom}</b><div className="text-xs text-[#74746E]">{version.start?.slice(0,5)}–{version.end?.slice(0,5)} · Monday–Friday</div></div><div className="flex gap-2"><button onClick={() => setEffectiveFrom(version.effectiveFrom)} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#1F4D47]">Edit</button><button onClick={() => { if (window.confirm(`Delete the schedule effective ${version.effectiveFrom}? The previous version will apply instead.`)) run(() => deleteWeekdayAttendanceSchedule(staffId, version.effectiveFrom), "Schedule version deleted."); }} className="flex items-center justify-center gap-1.5 rounded-lg border border-[#E6C9C2] px-3 py-2 text-xs font-semibold text-[#A33D28]"><Trash2 size={14} /> Delete</button></div></div>)}</div>}
     </div>
-    <TemporaryOverrideEditor key={staffId} staffId={staffId} schedules={schedules} overrides={ownOverrides} run={run} />
+    <TemporaryOverrideEditor key={`${staffId}-${defaultDate}`} staffId={staffId} schedules={schedules} overrides={ownOverrides} defaultDate={defaultDate} run={run} />
   </section>;
 }
 
@@ -216,18 +253,19 @@ function ScheduleStatus({ title, empty, schedules }: { title: string; empty: str
   return <div className="rounded-xl bg-[#F6F5F0] p-3"><div className="text-xs font-semibold uppercase text-[#74746E]">{title}</div>{schedules.length ? <div className="mt-2 space-y-2">{schedules.map((schedule) => <div key={schedule.effectiveFrom} className="text-sm"><b>{schedule.start?.slice(0,5)}–{schedule.end?.slice(0,5)}</b><div className="text-xs text-[#74746E]">Effective {schedule.effectiveFrom}</div></div>)}</div> : <p className="mt-2 text-sm text-[#8A8A84]">{empty}</p>}</div>;
 }
 
-function TemporaryOverrideEditor({ staffId, schedules, overrides, run }: {
+function TemporaryOverrideEditor({ staffId, schedules, overrides, defaultDate, run }: {
   staffId: string; schedules: AttendanceSchedule[]; overrides: AttendanceScheduleOverride[];
+  defaultDate: string;
   run: (task: () => Promise<void>, success: string) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const base = attendanceScheduleForDate(staffId, today, schedules);
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo] = useState(today);
+  const base = attendanceScheduleForDate(staffId, defaultDate, schedules, overrides);
+  const existing = overrides.find((override) => override.date === defaultDate);
+  const [dateFrom, setDateFrom] = useState(defaultDate);
+  const [dateTo, setDateTo] = useState(defaultDate);
   const [start, setStart] = useState(base?.start?.slice(0,5) ?? "08:00");
   const [end, setEnd] = useState(base?.end?.slice(0,5) ?? "17:00");
-  const [isWorkday, setIsWorkday] = useState(true);
-  const [note, setNote] = useState("");
+  const [isWorkday, setIsWorkday] = useState(base?.isWorkday ?? true);
+  const [note, setNote] = useState(existing?.note ?? "");
   function selectDate(value: string) {
     setDateFrom(value);
     setDateTo(value);

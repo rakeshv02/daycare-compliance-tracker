@@ -9,6 +9,7 @@ import { STAFF_BASE } from "./staff";
 import { siteFromSlug } from "./inquiries";
 import { sendSms, thankYouMessage } from "./sms";
 import { staffNameForCode } from "./staff-codes";
+import { reconcileUnmatchedAttendance } from "./attendance-matching";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSite(session: any): SiteFilter | null {
@@ -93,17 +94,29 @@ export async function addEmployee(
   if (userSite !== "all" && site !== userSite) throw new Error("Unauthorized");
 
   const id = `DB_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  await pool.query(
-    `INSERT INTO staff_members (id, name, site, hire_date, is_db_only) VALUES ($1, $2, $3, $4, true)`,
-    [id, name.trim(), site, hireDate || null]
-  );
-  if (role && role !== "Caregiver") {
-    await pool.query(
-      `INSERT INTO staff_roles (staff_id, role) VALUES ($1, $2) ON CONFLICT (staff_id) DO UPDATE SET role = EXCLUDED.role`,
-      [id, role]
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO staff_members (id, name, site, hire_date, is_db_only) VALUES ($1, $2, $3, $4, true)`,
+      [id, name.trim(), site, hireDate || null]
     );
+    if (role && role !== "Caregiver") {
+      await client.query(
+        `INSERT INTO staff_roles (staff_id, role) VALUES ($1, $2) ON CONFLICT (staff_id) DO UPDATE SET role = EXCLUDED.role`,
+        [id, role]
+      );
+    }
+    await reconcileUnmatchedAttendance(client, id);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/attendance");
 }
 
 export async function updateEmployee(
@@ -154,6 +167,7 @@ export async function setLifecycle(
     [staffId, isActive, leavingDate || null]
   );
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/attendance");
   revalidatePath(`/dashboard/print/${staffId}`);
 }
 

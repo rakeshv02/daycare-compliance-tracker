@@ -6,6 +6,7 @@ import pool from "./db";
 import { authOptions } from "./auth";
 import { isIgnoredAttendanceName, normalizeAttendanceName } from "./attendance";
 import { STAFF_BASE } from "./staff";
+import { reconcileUnmatchedAttendance } from "./attendance-matching";
 
 async function requireDirector() {
   const session = await getServerSession(authOptions);
@@ -100,6 +101,23 @@ export async function importAttendanceCsv(fileName: string, text: string) {
     client.release();
   }
   revalidatePath("/dashboard/attendance");
+}
+
+export async function matchOldAttendanceEntries() {
+  await requireDirector();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await reconcileUnmatchedAttendance(client);
+    await client.query("COMMIT");
+    revalidatePath("/dashboard/attendance");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function matchAttendanceName(importedName: string, site: string, staffId: string) {
