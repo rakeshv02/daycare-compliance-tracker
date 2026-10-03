@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import pool from "@/lib/db";
 import { loadMergedRoster } from "@/lib/roster";
-import type { LeaveRequest } from "@/lib/leave";
+import type { LeaveDuration, LeaveRequest } from "@/lib/leave";
 import { buildAttendanceDays, isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DayClassification } from "@/lib/attendance";
 import LeaveAdminManager from "@/components/leave-admin-manager";
@@ -17,8 +17,9 @@ export default async function LeaveAdminPage() {
     pool.query<{
       id: number; staff_id: string; leave_type: string; is_paid_vacation: boolean; date_from: string; date_to: string;
       reason: string; status: string; director_note: string; created_at: string; decided_at: string | null;
+      duration: LeaveDuration; start_time: string | null; end_time: string | null;
     }>(`SELECT id,staff_id,leave_type,is_paid_vacation,date_from::text,date_to::text,reason,status,director_note,
-        created_at::text,decided_at::text FROM staff_leave_requests ORDER BY
+        created_at::text,decided_at::text,duration,start_time::text,end_time::text FROM staff_leave_requests ORDER BY
         CASE status WHEN 'Pending' THEN 0 ELSE 1 END, created_at DESC`),
     pool.query<{ staff_id: string; is_enabled: boolean }>("SELECT staff_id,is_enabled FROM staff_leave_access"),
     pool.query<{ staff_id: string; employee_id: string }>("SELECT staff_id,employee_id FROM staff_employee_ids"),
@@ -50,6 +51,7 @@ export default async function LeaveAdminPage() {
       leaveType: row.leave_type, isPaidVacation: row.is_paid_vacation || row.leave_type === "Paid vacation", dateFrom: row.date_from, dateTo: row.date_to,
       reason: row.reason, status: row.status, directorNote: row.director_note,
       createdAt: row.created_at, decidedAt: row.decided_at,
+      duration: row.duration, startTime: row.start_time?.slice(0, 5) ?? null, endTime: row.end_time?.slice(0, 5) ?? null,
     }];
   });
   const mappedPunches: AttendancePunch[] = punches.rows.filter((row) => !isIgnoredAttendanceName(row.imported_name)).map((row) => ({

@@ -6,6 +6,7 @@ const pool = new pg.Pool({
 });
 try {
   await pool.query(`
+    BEGIN;
     CREATE TABLE IF NOT EXISTS staff_leave_access (
       staff_id TEXT PRIMARY KEY,
       pin_hash TEXT NOT NULL,
@@ -36,6 +37,21 @@ try {
     CREATE INDEX IF NOT EXISTS staff_leave_requests_status_idx ON staff_leave_requests(status,created_at);
     ALTER TABLE staff_leave_requests
       ADD COLUMN IF NOT EXISTS is_paid_vacation BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE staff_leave_requests
+      ADD COLUMN IF NOT EXISTS duration TEXT NOT NULL DEFAULT 'Full day' CHECK (duration IN ('Full day','Half day','Part of day')),
+      ADD COLUMN IF NOT EXISTS start_time TIME,
+      ADD COLUMN IF NOT EXISTS end_time TIME;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='staff_leave_requests_partial_time_check'
+        AND conrelid='staff_leave_requests'::regclass) THEN
+        ALTER TABLE staff_leave_requests ADD CONSTRAINT staff_leave_requests_partial_time_check CHECK (
+          (duration='Full day' AND start_time IS NULL AND end_time IS NULL) OR
+          (duration IN ('Half day','Part of day') AND date_from=date_to
+            AND start_time IS NOT NULL AND end_time IS NOT NULL AND end_time>start_time)
+        );
+      END IF;
+    END $$;
+    COMMIT;
   `);
   console.log("Leave tables created (or already exist).");
 } finally {

@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import pool from "./db";
 import { authOptions } from "./auth";
 import { clearLeaveSession, getLeaveStaffId, setLeaveSession } from "./leave-auth";
-import { LEAVE_TYPES } from "./leave";
+import { parseLeaveSubmission } from "./leave";
 import { STAFF_BASE } from "./staff";
 
 async function requireDirector() {
@@ -143,12 +143,7 @@ export async function saveStaffPortalAccess(staffId: string, employeeId: string,
 export async function submitLeaveRequest(formData: FormData) {
   const staffId = getLeaveStaffId();
   if (!staffId) redirect("/leave/login");
-  const leaveType = String(formData.get("leaveType") ?? "");
-  const dateFrom = String(formData.get("dateFrom") ?? "");
-  const dateTo = String(formData.get("dateTo") ?? "");
-  const reason = String(formData.get("reason") ?? "").trim();
-  if (!LEAVE_TYPES.includes(leaveType as typeof LEAVE_TYPES[number])) throw new Error("Choose a valid leave type.");
-  if (!dateFrom || !dateTo || dateFrom > dateTo) throw new Error("Choose a valid date range.");
+  const { leaveType, dateFrom, dateTo, duration, startTime, endTime, reason } = parseLeaveSubmission(formData);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -156,18 +151,19 @@ export async function submitLeaveRequest(formData: FormData) {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [staffId]);
     const existing = await client.query(
       `SELECT 1 FROM staff_leave_requests
-       WHERE staff_id=$1 AND leave_type=$2 AND date_from=$3 AND date_to=$4 AND status='Pending'
+        WHERE staff_id=$1 AND leave_type=$2 AND date_from=$3 AND date_to=$4 AND status='Pending'
+          AND duration=$5 AND start_time IS NOT DISTINCT FROM $6::time AND end_time IS NOT DISTINCT FROM $7::time
        LIMIT 1`,
-      [staffId, leaveType, dateFrom, dateTo],
+      [staffId, leaveType, dateFrom, dateTo, duration, startTime, endTime],
     );
     if (existing.rowCount) {
       await client.query("ROLLBACK");
       return { error: "You already have a pending request for these dates and leave type." };
     }
     await client.query(
-      `INSERT INTO staff_leave_requests(staff_id,leave_type,date_from,date_to,reason)
-       VALUES($1,$2,$3,$4,$5)`,
-      [staffId, leaveType, dateFrom, dateTo, reason],
+      `INSERT INTO staff_leave_requests(staff_id,leave_type,date_from,date_to,reason,duration,start_time,end_time)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [staffId, leaveType, dateFrom, dateTo, reason, duration, startTime, endTime],
     );
     await client.query("COMMIT");
   } catch (error) {
