@@ -6,7 +6,8 @@ import pool from "./db";
 import { authOptions } from "./auth";
 import { isIgnoredAttendanceName, normalizeAttendanceName } from "./attendance";
 import { STAFF_BASE } from "./staff";
-import { reconcileUnmatchedAttendance } from "./attendance-matching";
+import { recordFormerAttendanceEmployee, reconcileUnmatchedAttendance } from "./attendance-matching";
+import type { FormerAttendanceEmployeeInput } from "./attendance-matching";
 
 async function requireDirector() {
   const session = await getServerSession(authOptions);
@@ -135,6 +136,27 @@ export async function matchAttendanceName(importedName: string, site: string, st
     [normalized, site, staffId],
   );
   revalidatePath("/dashboard/attendance");
+}
+
+export async function markFormerAttendanceEmployee(input: FormerAttendanceEmployeeInput) {
+  await requireDirector();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await recordFormerAttendanceEmployee(client, input);
+    await client.query("COMMIT");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/attendance");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+      throw new Error("This employee was just recorded or their Employee ID is already assigned. Refresh and select the existing record.");
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function saveAttendanceSchedule(

@@ -62,6 +62,16 @@ export type AttendanceLifecycle = {
 };
 
 export type DepartedAttendanceEmployee = StaffMember & { leavingDate: string | null };
+export type AttendanceMatchingEmployee = StaffMember & { hasLeft: boolean; leavingDate: string | null };
+
+export function attendanceMatchingEmployees(staff: StaffMember[], lifecycle: AttendanceLifecycle[]): AttendanceMatchingEmployee[] {
+  const statuses = new Map(lifecycle.map((item) => [item.staffId, item]));
+  return staff.map((person) => {
+    const status = statuses.get(person.id);
+    const hasLeft = status?.isActive === false;
+    return { ...person, hasLeft, leavingDate: hasLeft ? status.leavingDate : null };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function attendanceScheduleDefaultDate(periodStart: string | undefined, today: string) {
   return periodStart ?? today;

@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarClock, Upload, Users, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import type { StaffMember } from "@/lib/staff";
 import { attendanceScheduleDefaultDate, attendanceScheduleForDate, attendanceScheduleVersionsForDate, isIgnoredAttendanceName } from "@/lib/attendance";
-import type { AttendanceDay, AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DepartedAttendanceEmployee } from "@/lib/attendance";
+import type { AttendanceDay, AttendanceMatchingEmployee, AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DepartedAttendanceEmployee } from "@/lib/attendance";
+import AttendanceMatchRow from "@/components/attendance-match-row";
 import {
   classifyAttendanceDay, deleteAttendanceScheduleOverride, deleteWeekdayAttendanceSchedule, importAttendanceCsv,
-  matchAttendanceName, matchOldAttendanceEntries, saveAttendanceScheduleOverride, saveWeekdayAttendanceSchedule,
+  matchOldAttendanceEntries, saveAttendanceScheduleOverride, saveWeekdayAttendanceSchedule,
 } from "@/lib/attendance-actions";
 
 const CLASSIFICATIONS = ["", "Approved leave", "No-show", "Sick", "Vacation", "Bereavement", "Called out"];
@@ -16,6 +17,7 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 type Props = {
   roster: StaffMember[];
+  matchingRoster: AttendanceMatchingEmployee[];
   imports: { id: number; file_name: string; period_start: string; period_end: string; row_count: number; uploaded_at: string }[];
   punches: AttendancePunch[];
   schedules: AttendanceSchedule[];
@@ -26,7 +28,7 @@ type Props = {
   departed: DepartedAttendanceEmployee[];
 };
 
-export default function AttendanceManager({ roster, imports, schedules, overrides, days, unmatched, missing, departed }: Props) {
+export default function AttendanceManager({ roster, matchingRoster, imports, schedules, overrides, days, unmatched, missing, departed }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<"review" | "schedule" | "reconcile">("review");
   const [busy, startTransition] = useTransition();
@@ -161,7 +163,10 @@ export default function AttendanceManager({ roster, imports, schedules, override
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
               <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#1F4D47]">Unmatched attendance records</h2><p className="mt-1 text-sm text-[#7A7A74]">Choose the site-specific Employee ID for each imported name.</p></div><span className="rounded-full bg-[#FCF3E3] px-2.5 py-1 text-xs font-semibold text-[#8C6217]">{visibleUnmatched.length} unmatched</span></div>
               <div className="space-y-3">{visibleUnmatched.map((item) => (
-                <MatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={roster} run={run} busy={busy || matchingOldEntries} />
+                <AttendanceMatchRow key={`${item.site}-${item.imported_name}`} item={item} roster={matchingRoster} busy={busy || matchingOldEntries} onMatched={(text) => {
+                  setMessage(text);
+                  startTransition(() => router.refresh());
+                }} />
               ))}{!visibleUnmatched.length && <p className="text-sm text-[#4A7C68]">All imported names are matched.</p>}</div>
             </section>
             <section className="rounded-xl border border-[#E9E7DF] bg-white p-5">
@@ -201,13 +206,6 @@ function formatBreak(totalMinutes: number) {
 
 function Summary({ icon, label, value, warn }: { icon: React.ReactNode; label: string; value: React.ReactNode; warn?: boolean }) {
   return <div className={`rounded-xl border p-4 ${warn ? "border-[#E7C9A0] bg-[#FFF9EE]" : "border-[#E9E7DF] bg-white"}`}><div className="flex items-center gap-2 text-xs font-semibold uppercase text-[#6B6B64]">{icon}{label}</div><div className="mt-2 font-semibold text-[#1F4D47]">{value}</div></div>;
-}
-
-function MatchRow({ item, roster, run, busy }: { item: { imported_name: string; site: string }; roster: StaffMember[]; run: (task: () => Promise<void>, success: string) => void; busy: boolean }) {
-  const [staffId, setStaffId] = useState("");
-  const options = roster.filter((person) => person.site === item.site);
-  const selected = options.find((person) => person.id === staffId);
-  return <div className="rounded-xl border border-[#E9E7DF] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#8A8A84]">CSV name</p><b className="text-sm text-[#33332F]">{item.imported_name}</b></div><span className="rounded-full bg-[#F1F0EA] px-2.5 py-1 text-xs font-semibold text-[#55554F]">{item.site}</span></div><label className="mt-3 block text-xs font-semibold text-[#55554F]">Match to Employee ID<select value={staffId} onChange={(e) => setStaffId(e.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"><option value="">Select the {item.site} employee record…</option>{options.map((person) => <option key={person.id} value={person.id}>{person.employeeId ?? "ID not set"} — {person.name}</option>)}</select></label>{selected && <div className="mt-3 rounded-lg bg-[#F6F5F0] px-3 py-2 text-xs"><b>{selected.employeeId ?? "Employee ID not set"}</b> · {selected.name}<br />{selected.site}</div>}<button disabled={busy || !staffId} onClick={() => run(() => matchAttendanceName(item.imported_name, item.site, staffId), `Matched ${item.imported_name} to ${selected?.employeeId ?? "employee record"}.`)} className="mt-3 w-full rounded-xl bg-[#1F4D47] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Confirm site-specific match</button></div>;
 }
 
 function ScheduleEditor({ roster, schedules, overrides, staffId, setStaffId, effectiveFrom, setEffectiveFrom, defaultDate, hasAttendanceImport, run }: {

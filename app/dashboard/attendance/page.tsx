@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import pool from "@/lib/db";
 import { STAFF_BASE } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
-import { buildAttendanceDays, departedAttendanceEmployees, isIgnoredAttendanceName } from "@/lib/attendance";
+import { attendanceMatchingEmployees, buildAttendanceDays, departedAttendanceEmployees, isIgnoredAttendanceName } from "@/lib/attendance";
 import type { AttendancePunch, AttendanceSchedule, AttendanceScheduleOverride, DayClassification } from "@/lib/attendance";
 import AttendanceManager from "@/components/attendance-manager";
 
@@ -84,6 +84,7 @@ async function loadAttendance() {
 
   return {
     roster: activeRoster,
+    matchingRoster: attendanceMatchingEmployees(roster, mappedLifecycle),
     imports: mappedImports,
     punches: mappedPunches,
     schedules: mappedSchedules,
