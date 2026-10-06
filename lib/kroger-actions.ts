@@ -4,8 +4,9 @@ import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
 import pool from "./db";
 import { authOptions } from "./auth";
-import { searchStores, searchProducts, getProductsByUpcs, addToCart } from "./kroger";
-import type { StoreResult, ProductResult, CartItemInput } from "./kroger";
+import { searchStores, searchProducts, getProductsByUpcs } from "./kroger";
+import type { StoreResult, ProductResult } from "./kroger";
+import { dispatchKrogerOrder } from "./kroger-cart-dispatch";
 
 async function requireStaffName(): Promise<string> {
   const session = await getServerSession(authOptions);
@@ -220,32 +221,7 @@ export async function getPendingOrders(): Promise<PendingOrder[]> {
 // they're reported back so the director knows to add them manually.
 export async function pushOrderToKroger(orderId: number): Promise<{ ok: true; skipped: string[] } | { ok: false; error: string }> {
   const staffName = await requireDirector();
-
-  const orderRes = await pool.query<{ id: number; status: string }>("SELECT id, status FROM kroger_orders WHERE id = $1", [orderId]);
-  const order = orderRes.rows[0];
-  if (!order) return { ok: false, error: "Order not found." };
-  if (order.status !== "pending") return { ok: false, error: `Order is already ${order.status}.` };
-
-  const itemsRes = await pool.query<{ upc: string | null; name: string; quantity: number; is_custom: boolean }>(
-    "SELECT upc, name, quantity, is_custom FROM kroger_order_items WHERE order_id = $1",
-    [orderId]
-  );
-  const catalogItems = itemsRes.rows.filter((r) => !r.is_custom && r.upc);
-  const skipped = itemsRes.rows.filter((r) => r.is_custom || !r.upc).map((r) => `${r.name} (x${r.quantity})`);
-  const cartItems: CartItemInput[] = catalogItems.map((r) => ({ upc: r.upc as string, quantity: r.quantity }));
-
-  if (cartItems.length) {
-    try {
-      await addToCart(cartItems);
-    } catch (err) {
-      const error = err instanceof Error ? err.message : "Unknown error pushing to Kroger cart.";
-      await pool.query("UPDATE kroger_orders SET status = 'failed', error = $1, pushed_by = $2, pushed_at = NOW() WHERE id = $3", [error, staffName, orderId]);
-      revalidatePath("/dashboard/orders");
-      return { ok: false, error };
-    }
-  }
-
-  await pool.query("UPDATE kroger_orders SET status = 'pushed_to_cart', pushed_by = $1, pushed_at = NOW() WHERE id = $2", [staffName, orderId]);
+  const result = await dispatchKrogerOrder(orderId, staffName);
   revalidatePath("/dashboard/orders");
-  return { ok: true, skipped };
+  return result;
 }

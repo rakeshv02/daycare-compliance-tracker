@@ -248,6 +248,7 @@ export async function addToCart(items: CartItemInput[]): Promise<void> {
       Accept: "application/json",
     },
     body: JSON.stringify({ items: items.map((i) => ({ upc: i.upc, quantity: i.quantity, modality: "PICKUP" })) }),
+    signal: AbortSignal.timeout(25_000),
   });
   if (res.status !== 204) {
     const text = await res.text().catch(() => "");
