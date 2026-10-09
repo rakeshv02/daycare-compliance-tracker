@@ -64,10 +64,16 @@ export default function WaitlistTracker({
     ? SITES
     : SITES.filter((s) => s.value === sessionSite || s.value === "all");
 
+  const scopedInquiries = useMemo(
+    () => inquiries.filter((i) =>
+      (siteFilter === "all" || i.site === siteFilter) &&
+      (sessionSite === "all" || i.site === sessionSite)
+    ),
+    [inquiries, siteFilter, sessionSite]
+  );
+
   const filtered = useMemo(
-    () => inquiries.filter((i) => {
-      const siteOk = siteFilter === "all" || i.site === siteFilter;
-      const sessionOk = sessionSite === "all" || i.site === sessionSite;
+    () => scopedInquiries.filter((i) => {
       const term = q.toLowerCase();
       const searchOk =
         !term ||
@@ -75,20 +81,19 @@ export default function WaitlistTracker({
         `${i.child1First ?? ""} ${i.child1Last ?? ""}`.toLowerCase().includes(term) ||
         `${i.child2First ?? ""} ${i.child2Last ?? ""}`.toLowerCase().includes(term) ||
         i.phone.includes(term);
-      return siteOk && sessionOk && searchOk;
+      return searchOk;
     }),
-    [inquiries, siteFilter, sessionSite, q]
+    [scopedInquiries, q]
   );
 
   const summary = useMemo(() => {
-    const scoped = sessionSite === "all" ? inquiries : inquiries.filter((i) => i.site === sessionSite);
     return {
-      total: scoped.length,
-      awaitingTour: scoped.filter((i) => !i.tourCompleted).length,
-      touredNotEnrolled: scoped.filter((i) => i.tourCompleted && !i.enrolled).length,
-      enrolled: scoped.filter((i) => i.enrolled).length,
+      total: scopedInquiries.length,
+      awaitingTour: scopedInquiries.filter((i) => !i.tourCompleted).length,
+      touredNotEnrolled: scopedInquiries.filter((i) => i.tourCompleted && !i.enrolled).length,
+      enrolled: scopedInquiries.filter((i) => i.enrolled).length,
     };
-  }, [inquiries, sessionSite]);
+  }, [scopedInquiries]);
 
   return (
     <div className="min-h-screen bg-[#FAFAF7] p-6 sm:p-8">
@@ -103,7 +108,7 @@ export default function WaitlistTracker({
               <h1 className="text-xl font-semibold text-[#1F4D47]" style={{ fontFamily: "Fredoka" }}>
                 Parent Waitlist
               </h1>
-              <p className="text-xs text-[#A0A09A]">{summary.total} inquiries · saved automatically</p>
+              <p className="text-xs text-[#A0A09A]">{siteFilter === "all" ? "All sites" : siteFilter} · {summary.total} inquiries · saved automatically</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
