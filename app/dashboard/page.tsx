@@ -8,7 +8,7 @@ import ComplianceTracker from "@/components/compliance-tracker";
 import PendingLeaveNotice from "@/components/pending-leave-notice";
 
 async function loadData() {
-  const [credsRows, trainingRows, rolesRows, lifecycleRows, driverRows, dbStaffRows] = await Promise.all([
+  const [credsRows, trainingRows, rolesRows, lifecycleRows, driverRows, dbStaffRows, preServiceRows] = await Promise.all([
     pool.query<{ staff_id: string; cred_type: string; issued_date: string | null; expires_date: string }>(
       "SELECT staff_id, cred_type, issued_date::text, expires_date::text FROM staff_credentials"
     ),
@@ -26,6 +26,9 @@ async function loadData() {
     ),
     pool.query<{ id: string; name: string; site: string; hire_date: string | null; is_db_only: boolean }>(
       "SELECT id, name, site, hire_date::text, is_db_only FROM staff_members"
+    ),
+    pool.query<{ staff_id: string; completed: boolean; completed_date: string | null }>(
+      "SELECT staff_id, completed, completed_date::text FROM staff_pre_service"
     ),
   ]);
 
@@ -51,7 +54,12 @@ async function loadData() {
       site: r.site as StaffMember["site"],
       hireDate: r.hire_date ?? "",
     }));
-  const allStaff = [...merged, ...newStaff];
+  const preService = new Map(preServiceRows.rows.map((r) => [r.staff_id, r]));
+  const allStaff = [...merged, ...newStaff].map((s) => ({
+    ...s,
+    preServiceCompleted: preService.get(s.id)?.completed ?? false,
+    preServiceDate: preService.get(s.id)?.completed_date ?? null,
+  }));
 
   const credentials: Record<string, Record<string, { issued: string | null; expires: string }>> = {};
   for (const r of credsRows.rows) {

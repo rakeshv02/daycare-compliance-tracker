@@ -10,6 +10,7 @@ import { siteFromSlug } from "./inquiries";
 import { sendSms, thankYouMessage } from "./sms";
 import { staffNameForCode } from "./staff-codes";
 import { reconcileUnmatchedAttendance } from "./attendance-matching";
+import { validatePreService } from "./pre-service";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSite(session: any): SiteFilter | null {
@@ -85,13 +86,16 @@ export async function addEmployee(
   name: string,
   site: string,
   hireDate: string | null,
-  role: string
+  role: string,
+  preServiceCompleted = false,
+  preServiceDate: string | null = null
 ) {
   const session = await getServerSession(authOptions);
   const userSite = getSite(session);
   if (!userSite) throw new Error("Unauthorized");
   // Site-restricted users can only add to their own site
   if (userSite !== "all" && site !== userSite) throw new Error("Unauthorized");
+  const preService = validatePreService(preServiceCompleted, preServiceDate);
 
   const id = `DB_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const client = await pool.connect();
@@ -100,6 +104,11 @@ export async function addEmployee(
     await client.query(
       `INSERT INTO staff_members (id, name, site, hire_date, is_db_only) VALUES ($1, $2, $3, $4, true)`,
       [id, name.trim(), site, hireDate || null]
+    );
+    await client.query(
+      `INSERT INTO staff_pre_service (staff_id, completed, completed_date)
+       VALUES ($1, $2, $3)`,
+      [id, preService.completed, preService.date]
     );
     if (role && role !== "Caregiver") {
       await client.query(
@@ -117,6 +126,42 @@ export async function addEmployee(
   }
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/attendance");
+}
+
+export async function savePreService(
+  staffId: string,
+  completed: boolean,
+  date: string | null
+) {
+  const session = await getServerSession(authOptions);
+  const site = getSite(session);
+  if (!site) throw new Error("Unauthorized");
+  const member = await pool.query<{ site: string }>(
+    "SELECT site FROM staff_members WHERE id = $1", [staffId]
+  );
+  const staff = member.rows[0] ?? STAFF_BASE.find((s) => s.id === staffId);
+  if (!staff || (site !== "all" && site !== staff.site)) throw new Error("Unauthorized");
+
+  const previous = await pool.query<{ completed: boolean; completed_date: string | null }>(
+    "SELECT completed, completed_date::text FROM staff_pre_service WHERE staff_id = $1", [staffId]
+  );
+  // Retain the explicitly allowed blank dates on backfilled staff with no hire date.
+  const allowMissingDate = previous.rows[0]?.completed === true && previous.rows[0].completed_date === null;
+  const value = validatePreService(completed, date, allowMissingDate);
+  await pool.query(
+    `INSERT INTO staff_pre_service (staff_id, completed, completed_date)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (staff_id) DO UPDATE SET
+       completed = EXCLUDED.completed,
+       completed_date = EXCLUDED.completed_date,
+       date_source = CASE
+         WHEN staff_pre_service.completed IS DISTINCT FROM EXCLUDED.completed
+           OR staff_pre_service.completed_date IS DISTINCT FROM EXCLUDED.completed_date
+         THEN 'manual' ELSE staff_pre_service.date_source END,
+       updated_at = NOW()`,
+    [staffId, value.completed, value.date]
+  );
+  revalidatePath("/dashboard");
 }
 
 export async function updateEmployee(

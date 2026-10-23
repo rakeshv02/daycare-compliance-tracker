@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { addEmployee, updateEmployee } from "@/lib/actions";
 import { ROLES } from "@/lib/staff";
 import type { StaffMember } from "@/lib/staff";
+import { PreServiceFields } from "./pre-service-fields";
+import { validatePreService } from "@/lib/pre-service";
 
 const SITES = ["Noah's Arks", "Light House Academy"] as const;
 
@@ -28,27 +30,34 @@ export function EmployeeFormModal({
   );
   const [hireDate, setHireDate] = useState(isEdit ? (mode.staff.hireDate ?? "") : "");
   const [role, setRole] = useState(isEdit ? mode.staff.role : "Caregiver");
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [preServiceCompleted, setPreServiceCompleted] = useState(false);
+  const [preServiceDate, setPreServiceDate] = useState("");
   const [error, setError] = useState("");
 
-  function save() {
+  async function save() {
+    if (pending) return;
     if (!name.trim()) { setError("Name is required."); return; }
     setError("");
-    startTransition(() => {
-      void (async () => {
+    try {
+        if (!isEdit) validatePreService(preServiceCompleted, preServiceDate || null);
+        setPending(true);
         if (isEdit) {
           await updateEmployee(mode.staff.id, name, site, hireDate || null, mode.isDbOnly);
         } else {
-          await addEmployee(name, site, hireDate || null, role);
+          await addEmployee(name, site, hireDate || null, role, preServiceCompleted, preServiceDate || null);
         }
         onClose();
-      })();
-    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save employee.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-[#1F4D47]" style={{ fontFamily: "Fredoka" }}>
             {isEdit ? "Edit employee" : "Add employee"}
@@ -103,7 +112,14 @@ export function EmployeeFormModal({
             </div>
           )}
 
-          {error && <p className="text-xs text-[#B23E27] bg-[#FBEAE6] rounded-xl px-3 py-2">{error}</p>}
+          {!isEdit && (
+            <PreServiceFields
+              completed={preServiceCompleted}
+              date={preServiceDate}
+              onChange={(completed, date) => { setPreServiceCompleted(completed); setPreServiceDate(date); }}
+            />
+          )}
+          {error && <p className="text-xs text-[#B23E27] bg-[#FBEAE6] rounded-xl px-3 py-2" role="alert">{error}</p>}
         </div>
 
         <button

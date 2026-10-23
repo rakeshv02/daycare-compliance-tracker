@@ -4,6 +4,8 @@ export type StaffMember = {
   name: string;
   site: "Noah's Arks" | "Light House Academy";
   hireDate: string;
+  preServiceCompleted?: boolean;
+  preServiceDate?: string | null;
 };
 
 export type SiteFilter = "Noah's Arks" | "Light House Academy" | "all";

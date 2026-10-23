@@ -292,6 +292,12 @@ export default function ComplianceTracker({
                             {s.hireDate ? ` · hired ${s.hireDate}` : ""}
                             {leavingDate ? ` · left ${leavingDate}` : ""}
                           </div>
+                          {s.preServiceCompleted && (
+                            <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-[#EAF5F0] px-2 py-0.5 text-[11px] font-semibold text-[#2F7A60]">
+                              <CheckCircle2 size={11} />
+                              Pre-service done · {s.preServiceDate || "Date not recorded"}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>

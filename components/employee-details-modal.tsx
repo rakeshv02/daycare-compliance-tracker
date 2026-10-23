@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { X, Car } from "lucide-react";
-import { setLifecycle, setDriverInfo } from "@/lib/actions";
+import { setLifecycle, setDriverInfo, savePreService } from "@/lib/actions";
 import type { StaffMember, LifecycleRecord, DriverInfo } from "@/lib/staff";
+import { PreServiceFields } from "./pre-service-fields";
+import { validatePreService } from "@/lib/pre-service";
 
 export function EmployeeDetailsModal({
   staff,
@@ -22,18 +24,29 @@ export function EmployeeDetailsModal({
   const [dlNumber, setDlNumber] = useState(driverInfo.dlNumber ?? "");
   const [dlExpires, setDlExpires] = useState(driverInfo.dlExpires ?? "");
   const [transportDate, setTransportDate] = useState(driverInfo.transportTrainingDate ?? "");
-  const [pending, startTransition] = useTransition();
+  const [preServiceCompleted, setPreServiceCompleted] = useState(staff.preServiceCompleted ?? false);
+  const [preServiceDate, setPreServiceDate] = useState(staff.preServiceDate ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
 
-  function save() {
-    startTransition(() => {
-      void (async () => {
+  async function save() {
+    if (pending) return;
+    setError("");
+    try {
+        validatePreService(preServiceCompleted, preServiceDate || null,
+          staff.preServiceCompleted === true && !staff.preServiceDate);
+        setPending(true);
         await Promise.all([
           setLifecycle(staff.id, isActive, leavingDate || null),
           setDriverInfo(staff.id, isDriver, dlNumber || null, dlExpires || null, transportDate || null),
+          savePreService(staff.id, preServiceCompleted, preServiceDate || null),
         ]);
         onClose();
-      })();
-    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save employee details.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -68,6 +81,14 @@ export function EmployeeDetailsModal({
           </div>
         </div>
 
+        <div className="mb-5">
+          <PreServiceFields
+            completed={preServiceCompleted}
+            date={preServiceDate}
+            onChange={(completed, date) => { setPreServiceCompleted(completed); setPreServiceDate(date); }}
+          />
+        </div>
+
         {/* Driver */}
         <div className="space-y-3 border-t border-[#F0F0EE] pt-4">
           <p className="text-xs font-semibold text-[#6B6B64] uppercase tracking-wide">Driver status</p>
@@ -99,6 +120,7 @@ export function EmployeeDetailsModal({
           )}
         </div>
 
+        {error && <p className="mt-3 text-xs text-red-500" role="alert">{error}</p>}
         <button
           onClick={save}
           disabled={pending}
