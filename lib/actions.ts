@@ -6,7 +6,7 @@ import pool from "./db";
 import { authOptions } from "./auth";
 import type { SiteFilter } from "./staff";
 import { STAFF_BASE } from "./staff";
-import { siteFromSlug } from "./inquiries";
+import { siteFromSlug, normalizeInquiryPayment } from "./inquiries";
 import { sendSms, thankYouMessage } from "./sms";
 import { staffNameForCode } from "./staff-codes";
 import { reconcileUnmatchedAttendance } from "./attendance-matching";
@@ -339,6 +339,25 @@ const INQUIRY_BOOL_FIELDS = new Set([
   "registration_paid",
   "ccs_approved",
 ]);
+
+export async function saveInquiryPayment(
+  inquiryId: number,
+  receiptNumber: string | null,
+  paymentDate: string | null
+) {
+  if (!Number.isSafeInteger(inquiryId) || inquiryId <= 0) throw new Error("Invalid inquiry.");
+  const payment = normalizeInquiryPayment(receiptNumber, paymentDate);
+  // Match the existing no-login waitlist editor's access model.
+  await getInquirySite(inquiryId);
+  const result = await pool.query(
+    `UPDATE inquiries
+     SET payment_receipt_number = $1, payment_date = $2, updated_at = NOW()
+     WHERE id = $3 RETURNING id`,
+    [payment.receiptNumber, payment.paymentDate, inquiryId]
+  );
+  if (!result.rows.length) throw new Error("Inquiry not found");
+  revalidatePath("/dashboard/waitlist");
+}
 
 export async function updateInquiryField(
   inquiryId: number,

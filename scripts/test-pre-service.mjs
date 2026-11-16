@@ -81,7 +81,7 @@ registerHooks({
     if (s === "./auth") return virtual("export const authOptions={}");
     if (s === "./staff") return libFile("staff");
     if (s === "./pre-service") return libFile("pre-service");
-    if (s === "./inquiries") return virtual("export function siteFromSlug(){}");
+    if (s === "./inquiries") return virtual("export function siteFromSlug(){};export function normalizeInquiryPayment(){}");
     if (s === "./sms") return virtual("export async function sendSms(){};export function thankYouMessage(){}");
     if (s === "./staff-codes") return virtual("export function staffNameForCode(){}");
     if (s === "./attendance-matching") return virtual("export async function reconcileUnmatchedAttendance(){}");

@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X, MessageCircleHeart, AlertTriangle, Check, Flag, Hourglass } from "lucide-react";
 import {
-  updateInquiryField, markTourCompleted, resendThankYou, deleteInquiry, setFlag,
+  updateInquiryField, markTourCompleted, resendThankYou, deleteInquiry, setFlag, saveInquiryPayment,
 } from "@/lib/actions";
-import { REGISTRATION_TYPES, type Inquiry } from "@/lib/inquiries";
+import { REGISTRATION_TYPES, normalizeInquiryPayment, type Inquiry } from "@/lib/inquiries";
 
 const inputClass = "w-full px-3 py-2 rounded-xl border border-[#E9E7DF] text-sm outline-none focus:border-[#1F4D47]";
 const labelClass = "text-xs font-semibold text-[#6B6B64] block mb-1";
@@ -34,6 +34,10 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
   const [paperworkReturned, setPaperworkReturned] = useState(inquiry.paperworkReturnedDate ?? "");
   const [teacherNotified, setTeacherNotified] = useState(inquiry.teacherNotified);
   const [registrationPaid, setRegistrationPaid] = useState(inquiry.registrationPaid);
+  const [paymentReceiptNumber, setPaymentReceiptNumber] = useState(inquiry.paymentReceiptNumber ?? "");
+  const [paymentDate, setPaymentDate] = useState(inquiry.paymentDate ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [notes, setNotes] = useState(inquiry.notes ?? "");
   const [flagged, setFlagged] = useState(inquiry.flagged);
   const [flagReason, setFlagReason] = useState(inquiry.flagReason ?? "");
@@ -53,9 +57,14 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
     return code?.trim() || null;
   }
 
-  function save() {
-    startTransition(() => {
-      void (async () => {
+  async function save() {
+    if (saving || pending) return;
+    setSaveError("");
+    try {
+        const payment = normalizeInquiryPayment(paymentReceiptNumber || null, paymentDate || null);
+        const paymentChanged = payment.receiptNumber !== (inquiry.paymentReceiptNumber ?? null) ||
+          payment.paymentDate !== (inquiry.paymentDate ?? null);
+        setSaving(true);
         await Promise.all([
           updateInquiryField(inquiry.id, "enrolled", enrolled),
           updateInquiryField(inquiry.id, "start_date", startDate || null),
@@ -66,11 +75,15 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
           updateInquiryField(inquiry.id, "registration_paid", registrationPaid),
           updateInquiryField(inquiry.id, "notes", notes || null),
           updateInquiryField(inquiry.id, "ccs_approved", ccsApproved),
+          ...(paymentChanged ? [saveInquiryPayment(inquiry.id, payment.receiptNumber, payment.paymentDate)] : []),
         ]);
         router.refresh();
         onClose();
-      })();
-    });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   // Flagging is separate from the bulk save above — it needs its own staff
@@ -352,6 +365,36 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
           <Toggle checked={teacherNotified} onChange={setTeacherNotified} label="Teacher notified" />
           <Toggle checked={registrationPaid} onChange={setRegistrationPaid} label="Registration paid" />
 
+          <div className="space-y-3 rounded-xl border border-[#E9E7DF] p-3">
+            <p className="text-xs font-semibold text-[#6B6B64] uppercase tracking-wide">Payment receipt</p>
+            <p className="text-xs text-[#A0A09A]">Optional. Record a payment received before the start date.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor={`receipt-${inquiry.id}`} className={labelClass}>Receipt number</label>
+                <input
+                  id={`receipt-${inquiry.id}`}
+                  type="text"
+                  className={inputClass}
+                  value={paymentReceiptNumber}
+                  onChange={(e) => setPaymentReceiptNumber(e.target.value)}
+                  maxLength={100}
+                  placeholder="e.g. ABC12345"
+                />
+                <p className="mt-1 text-xs text-[#A0A09A]">Letters and numbers</p>
+              </div>
+              <div>
+                <label htmlFor={`payment-date-${inquiry.id}`} className={labelClass}>Date of payment</label>
+                <input
+                  id={`payment-date-${inquiry.id}`}
+                  type="date"
+                  className={inputClass}
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className={labelClass}>Notes</label>
             <textarea
@@ -362,17 +405,18 @@ export function InquiryDetailModal({ inquiry, onClose }: { inquiry: Inquiry; onC
           </div>
         </div>
 
+        {saveError && <p className="mt-3 text-xs text-[#B23E27]" role="alert">{saveError}</p>}
         <div className="flex items-center gap-2 mt-5">
           <button
             onClick={save}
-            disabled={pending}
+            disabled={pending || saving}
             className="flex-1 bg-[#1F4D47] text-white text-sm font-medium py-2.5 rounded-xl hover:opacity-90 transition disabled:opacity-40"
           >
-            {pending ? "Saving…" : "Save changes"}
+            {pending || saving ? "Saving…" : "Save changes"}
           </button>
           <button
             onClick={handleDelete}
-            disabled={pending}
+            disabled={pending || saving}
             className="text-xs font-semibold text-[#B23E27] px-3 py-2.5 rounded-xl hover:bg-[#FBEAE6] transition"
           >
             Remove

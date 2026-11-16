@@ -53,6 +53,8 @@ export type Inquiry = {
   paperworkReturnedDate: string | null;
   teacherNotified: boolean;
   registrationPaid: boolean;
+  paymentReceiptNumber: string | null;
+  paymentDate: string | null;
   notes: string | null;
 
   flagged: boolean;
@@ -99,6 +101,8 @@ export type InquiryRow = {
   paperwork_returned_date: string | null;
   teacher_notified: boolean;
   registration_paid: boolean;
+  payment_receipt_number: string | null;
+  payment_date: string | null;
   notes: string | null;
   flagged: boolean;
   flag_reason: string | null;
@@ -135,12 +139,36 @@ export function mapInquiryRow(r: InquiryRow, auditLog: AuditLogEntry[] = []): In
     paperworkReturnedDate: r.paperwork_returned_date,
     teacherNotified: r.teacher_notified,
     registrationPaid: r.registration_paid,
+    paymentReceiptNumber: r.payment_receipt_number ?? null,
+    paymentDate: r.payment_date ?? null,
     notes: r.notes,
     flagged: r.flagged,
     flagReason: r.flag_reason,
     ccsApproved: r.ccs_approved,
     auditLog,
   };
+}
+
+export function normalizeInquiryPayment(receiptNumber: string | null, paymentDate: string | null) {
+  if ((receiptNumber !== null && typeof receiptNumber !== "string") ||
+      (paymentDate !== null && typeof paymentDate !== "string")) {
+    throw new Error("Enter a valid receipt number and payment date.");
+  }
+  const receipt = receiptNumber?.trim() || null;
+  const date = paymentDate?.trim() || null;
+  if (!receipt && !date) return { receiptNumber: null, paymentDate: null };
+  if (!receipt || !date) {
+    throw new Error("Enter both the receipt number and payment date, or clear both fields.");
+  }
+  if (receipt.length > 100 || !/^[A-Za-z0-9]+$/.test(receipt)) {
+    throw new Error("Receipt number must contain only letters and numbers, up to 100 characters.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) ||
+      new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+    throw new Error("Enter a valid payment date.");
+  }
+  return { receiptNumber: receipt, paymentDate: date };
 }
 
 // Same access-control shape used across lib/actions.ts for staff records.

@@ -19,7 +19,8 @@ async function loadInquiries() {
               tour_time::text, tour_completed, tour_completed_at::text,
               thank_you_sent, thank_you_sent_at::text, thank_you_error,
               enrolled, start_date::text, registration_type, assigned_classroom,
-              paperwork_returned_date::text, teacher_notified, registration_paid, notes,
+              paperwork_returned_date::text, teacher_notified, registration_paid,
+              payment_receipt_number, payment_date::text, notes,
               flagged, flag_reason, ccs_approved
        FROM inquiries
        ORDER BY created_at DESC`
